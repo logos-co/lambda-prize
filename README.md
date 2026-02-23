@@ -1,6 +1,6 @@
 # **λ**Prize
 
-A competitive prize framework for the Logos ecosystem. **λ**Prize targets projects where Logos cares about the outcome but not the path.
+A competitive prize framework for the Logos ecosystem. **λ**Prize targets contributions where Logos cares about the outcome but not the path.
 
 ## Prizes
 
