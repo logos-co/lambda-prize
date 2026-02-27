@@ -17,6 +17,8 @@ All prizes live in the [`prizes/`](prizes/) directory. Each prize is a markdown 
 | [LP-0006](prizes/LP-0006.md) | Bitcoin–LEZ Atomic Swap Using Adaptor Signatures         |
 | [LP-0007](prizes/LP-0007.md) | Monero–LEZ Atomic Swap                                   |
 | [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging |
+| [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        |
+| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  |
 
 ### Proposing a New Prize
 
