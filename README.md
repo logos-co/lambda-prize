@@ -6,16 +6,17 @@ A competitive prize framework for the Logos ecosystem. **λ**Prize targets contr
 
 All prizes live in the [`prizes/`](prizes/) directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
 
-| File | Description |
-|---|---|
+| File                         | Description                                              |
+| ---------------------------- | -------------------------------------------------------- |
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes |
-| [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof |
-| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig |
-| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor |
-| [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances |
-| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation |
-| [LP-0006](prizes/LP-0006.md) | Bitcoin–LEZ Atomic Swap Using Adaptor Signatures |
-| [LP-0007](prizes/LP-0007.md) | Monero–LEZ Atomic Swap |
+| [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof                              |
+| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  |
+| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  |
+| [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances               |
+| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                        |
+| [LP-0006](prizes/LP-0006.md) | Bitcoin–LEZ Atomic Swap Using Adaptor Signatures         |
+| [LP-0007](prizes/LP-0007.md) | Monero–LEZ Atomic Swap                                   |
+| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging |
 
 ### Proposing a New Prize
 
