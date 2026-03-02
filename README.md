@@ -20,6 +20,12 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging |
 | [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        |
 | [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  |
+| [LP-0011](prizes/LP-0011.md) | Program development tooling                              |
+| [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      |
+| [LP-0013](prizes/LP-0013.md) | Token program improvements                               |
+| [LP-0014](prizes/LP-0014.md) | General cross-program calls via tail calls               |
+| [LP-0015](prizes/LP-0015.md) | Bug bounty: Protocol vulnerabilities                     |
+| [LP-0016](prizes/LP-0016.md) | Adversarial testing/ uzzing infrastructure               |
 
 
 ### Proposing a New Prize
