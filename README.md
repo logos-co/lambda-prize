@@ -3,7 +3,19 @@
 A competitive prize framework for the Logos ecosystem. **λ**Prize targets contributions where Logos cares about the outcome but not the path.
 
 > [!NOTE]
-> By participating in **λ**Prize — including by submitting a solution or pull request — you agree to the [Terms & Conditions](TERMS.md). Please read them before submitting.
+> By participating in **λ**Prize, including by submitting a solution or pull request, you agree to the [Terms & Conditions](TERMS.md). Please read them before submitting.
+
+## About Logos
+
+[Logos](https://logos.co) is a social movement and decentralised technology stack built to restore agency, trust, and civic power. Its mission is to give people and communities the tools to organise and interact without relying on captured or centralised institutions.
+
+The Logos stack is private by default and comprises three core layers:
+
+- **Blockchain** - A privacy-preserving Layer 1 for execution, settlement, and coordination. The **Logos Execution Zone (LEZ)** is the programmable environment where decentralised applications run, featuring a unique separation of public and private state with shielded balances and private state as first-class primitives.
+- **Storage** - Durable, censorship-resistant data availability powering fully decentralised apps and file sharing.
+- **Messaging** - Private peer-to-peer communication that resists surveillance and censorship.
+
+Together these form a unified, modular ecosystem, accessible through **Logos Core**, a plugin-based runtime that lets developers compose all three layers into privacy-preserving applications. 
 
 ## Prizes
 
