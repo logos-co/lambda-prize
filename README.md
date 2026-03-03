@@ -7,9 +7,9 @@ A competitive prize framework for the Logos ecosystem. **λ**Prize targets contr
 
 ## About Logos
 
-[Logos](https://logos.co) is a social movement and decentralised technology stack built to restore agency, trust, and civic power. Its mission is to give people and communities the tools to organise and interact without relying on captured or centralised institutions.
+[Logos](https://logos.co) is a social movement and decentralised technology stack.
 
-The Logos stack is private by default and comprises three core layers:
+The Logos stack comprises three core layers:
 
 - **Blockchain** - A privacy-preserving Layer 1 for execution, settlement, and coordination. The **Logos Execution Zone (LEZ)** is the programmable environment where decentralised applications run, featuring a unique separation of public and private state with shielded balances and private state as first-class primitives.
 - **Storage** - Durable, censorship-resistant data availability powering fully decentralised apps and file sharing.
