@@ -2,6 +2,9 @@
 
 A competitive prize framework for the Logos ecosystem. **λ**Prize targets contributions where Logos cares about the outcome but not the path.
 
+> [!NOTE]
+> By participating in **λ**Prize — including by submitting a solution or pull request — you agree to the [Terms & Conditions](TERMS.md). Please read them before submitting.
+
 ## Prizes
 
 All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
@@ -55,6 +58,16 @@ If multiple solutions target the same prize, the first submission that satisfies
 > **λ**Prize launches at **Parallel Society**, a Logos-run event in Lisbon on **6–7 March 2026**, via a dedicated hackathon platform. During the event, submissions are accepted **only** through the event portal. The event follows an in-person hackathon format — submissions are subject to judging and the best solution is selected — so the rules deviate slightly from the first-come-first-served process described here.
 >
 > Submissions through this repository open on **8 March 2026** and follow the standard first-come-first-served process. However, Parallel Society submissions that are still being evaluated take precedence: a solution submitted here before a Parallel Society entry has been reviewed does **not** receive priority over that entry.
+
+## Terms & Conditions
+
+All participants are bound by the [Terms & Conditions](TERMS.md). Key points:
+
+- Submissions must be licensed under MIT or Apache 2.0.
+- One submission per prize per participant/team.
+- Logos retains sole discretion over evaluation and prize awards.
+- Submissions are public and non-confidential.
+- See the full [Terms & Conditions](TERMS.md) for eligibility, IP, liability, and other provisions.
 
 ## License
 
