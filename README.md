@@ -40,8 +40,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0013](prizes/LP-0013.md)   | Token program improvements (authorities)                 |
 | [LP-0014](prizes/LP-0014.md)   | Token program improvements (ATAs + wallet tooling)       |
 | [LP-0015](prizes/LP-0015.md)   | General cross-program calls via tail calls               |
-| [LP-0016](prizes/LP-0016.md)   | Adversarial testing/fuzzing infrastructure               |
-| [LP-0017](prizes/LP-0017.md)   | Decentralized Social Protocol with Generalized RLN-Based Reputation |
+| [LP-0016](prizes/LP-0016.md)   | Decentralized Social Protocol with Generalized RLN-Based Reputation |
 
 ### Proposing a New Prize
 
