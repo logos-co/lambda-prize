@@ -42,6 +42,8 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0014](prizes/LP-0014.md)   | General cross-program calls via tail calls               |
 | [LP-0015](prizes/LP-0015.md)   | Bug bounty: Protocol vulnerabilities                     |
 | [LP-0016](prizes/LP-0016.md)   | Adversarial testing/ uzzing infrastructure               |
+| [LP-0017](prizes/LP-0017.md)   | Anonymous Forum with Threshold Moderation                |
+| [LP-0018](prizes/LP-0018.md)   | Ethereum–LEZ Atomic Swap                                 |
 
 
 ### Proposing a New Prize
