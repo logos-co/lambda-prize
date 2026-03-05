@@ -22,25 +22,24 @@ Together these form a unified, modular ecosystem, accessible through **Logos Cor
 All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
 
 
-| File                           | Description                                              |
-| ----------------------------   | -------------------------------------------------------- |
-| [LP-0000](prizes/LP-0000.md)   | Template — use this as the starting point for new prizes |
-| [LP-0001](prizes/LP-0001.md)   | Private NFT Ownership Proof                              |
-| [LP-0002](prizes/LP-0002.md)   | Private M-of-N Multisig                                  |
-| [LP-0003](prizes/LP-0003.md)   | Private Allowlist / Airdrop Distributor                  |
-| [LP-0004](prizes/LP-0004.md)   | Sealed-Bid Auction Using Shielded Balances               |
-| [LP-0005](prizes/LP-0005.md)   | Private Token Balance Attestation                        |
-| [LP-0006](prizes/LP-0006.md)   | Bitcoin–LEZ Atomic Swap Using Adaptor Signatures         |
-| [LP-0007](prizes/LP-0007.md)   | Monero–LEZ Atomic Swap                                   |
-| [LP-0008](prizes/LP-0008.md)   | Autonomous AI Module with Wallet, Storage, and Messaging |
-| [LP-0009](prizes/LP-0009.md)   | Keycard NIP-46 Nostr Signer Proxy                        |
-| [LP-0010](prizes/LP-0010.md)   | Shell dApp Integration Proof of Concept                  |
-| [LP-0011](prizes/LP-0011.md)   | Program development tooling                              |
-| [LP-0012](prizes/LP-0012.md)   | Event/Log mechanism                                      |
-| [LP-0013](prizes/LP-0013.md)   | Token program improvements (authorities)                 |
-| [LP-0014](prizes/LP-0014.md)   | Token program improvements (ATAs + wallet tooling)       |
-| [LP-0015](prizes/LP-0015.md)   | General cross-program calls via tail calls               |
-| [LP-0016](prizes/LP-0016.md)   | Decentralized Social Protocol with Generalized RLN-Based Reputation |
+| File                         | Description                                                         |
+| ---------------------------- | ------------------------------------------------------------------- |
+| [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes            |
+| [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof                                         |
+| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                             |
+| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                             |
+| [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances                          |
+| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                                   |
+| [LP-0006](prizes/LP-0006.md) | Bitcoin–LEZ Atomic Swap Using Adaptor Signatures                    |
+| [LP-0007](prizes/LP-0007.md) | Monero–LEZ Atomic Swap                                              |
+| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging            |
+| [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                                   |
+| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                             |
+| [LP-0011](prizes/LP-0011.md) | Program development tooling                                         |
+| [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                                 |
+| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                            |
+| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)                  |
+| [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls                          |
 
 ### Proposing a New Prize
 
