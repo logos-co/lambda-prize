@@ -22,24 +22,24 @@ Together these form a unified, modular ecosystem, accessible through **Logos Cor
 All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
 
 
-| File                         | Description                                              | Status |
-| ---------------------------- | -------------------------------------------------------- | ------ |
-| [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | Draft  |
-| [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof                              | Draft  |
-| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  | Draft  |
-| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Draft  |
-| [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances               | Draft  |
-| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                        | Draft  |
-| [LP-0006](prizes/LP-0006.md) | Bitcoin–LEZ Atomic Swap Using Adaptor Signatures         | Draft  |
-| [LP-0007](prizes/LP-0007.md) | Monero–LEZ Atomic Swap                                   | Draft  |
-| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Draft  |
-| [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        | Draft  |
-| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Draft  |
-| [LP-0011](prizes/LP-0011.md) | Program development tooling                              | Draft  |
-| [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      | Draft  |
-| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Draft  |
-| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Draft  |
-| [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Draft  |
+| File                         | Description                                              | Size   | Status |
+| ---------------------------- | -------------------------------------------------------- | ------ | ------ |
+| [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | —      | —      |
+| [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof                              | Medium | Draft  |
+| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  | Large  | Open   |
+| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Medium | Draft  |
+| [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances               | Large  | Draft  |
+| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                        | Large  | Open   |
+| [LP-0006](prizes/LP-0006.md) | Bitcoin–LEZ Atomic Swap Using Adaptor Signatures         | Large  | Draft  |
+| [LP-0007](prizes/LP-0007.md) | Monero–LEZ Atomic Swap                                   | XL     | Draft  |
+| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large  | Open   |
+| [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        | Small  | Open   |
+| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Open   |
+| [LP-0011](prizes/LP-0011.md) | Program development tooling: Rust SDK                    | Medium | Draft  |
+| [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      | Large  | Open   |
+| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Open   |
+| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Open   |
+| [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Open   |
 
 ### Proposing a New Prize
 
