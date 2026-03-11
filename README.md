@@ -37,8 +37,8 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Open   |
 | [LP-0011](prizes/LP-0011.md) | Program development tooling: Rust SDK                    | Medium | Draft  |
 | [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      | Large  | Open   |
-| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Open   |
-| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Open   |
+| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Open (solution under review) |
+| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Open (solution under review) |
 | [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Open   |
 
 ### Proposing a New Prize
@@ -64,9 +64,9 @@ If multiple solutions target the same prize, the first submission that satisfies
 > [!IMPORTANT]
 > **Parallel Society Launch Event**
 >
-> **λ**Prize launches at **Parallel Society**, a Logos-run event in Lisbon on **6–7 March 2026**, via a dedicated hackathon platform. During the event, submissions are accepted **only** through the event portal. The event follows an in-person hackathon format — submissions are subject to judging and the best solution is selected — so the rules deviate slightly from the first-come-first-served process described here.
+> **λ**Prize launched at **Parallel Society**, a Logos-run event in Lisbon on **6–7 March 2026**, via a dedicated hackathon platform. Submissions for LP-0013 and LP-0014 were received during the event.
 >
-> Submissions through this repository open on **8 March 2026** and follow the standard first-come-first-served process. However, Parallel Society submissions that are still being evaluated take precedence: a solution submitted here before a Parallel Society entry has been reviewed does **not** receive priority over that entry.
+> Submissions through this repository are now open and follow the standard first-come-first-served process. However, Parallel Society submissions that are still being evaluated take precedence.
 
 ## Terms & Conditions
 
