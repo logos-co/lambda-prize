@@ -36,8 +36,8 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Open                         |
 | [LP-0011](prizes/LP-0011.md) | Program development tooling: Rust SDK                    | Medium | Draft                        |
 | [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      | Large  | Open                         |
-| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Open (solution under review) |
-| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Open (solution under review) |
+| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Open   |
+| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Closed |
 | [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Open                         |
 
 ### Proposing a New Prize
