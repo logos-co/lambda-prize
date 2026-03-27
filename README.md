@@ -33,7 +33,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0006](prizes/LP-0006.md) | Atomic Swap with LEZ (BTC, XMR, ETH)                     | XL     | Draft                        |
 | [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large  | Open                         |
 | [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        | Small  | Closed                       |
-| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Open                         |
+| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Closed                       |
 | [LP-0011](prizes/LP-0011.md) | Program development tooling: Rust SDK                    | Medium | Draft                        |
 | [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      | Large  | Open                         |
 | [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Open   |
