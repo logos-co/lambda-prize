@@ -1,6 +1,6 @@
 # **λ**Prize
 
-A competitive prize framework for the Logos ecosystem. **λ**Prize targets contributions where Logos cares about the outcome but not the path.
+The Logos **λ**Prize program offers competitive prizes for building on the Logos stack. Browse all prizes below.
 
 > [!NOTE]
 > By participating in **λ**Prize, including by submitting a solution or pull request, you agree to the [Terms & Conditions](TERMS.md). Please read them before submitting.
