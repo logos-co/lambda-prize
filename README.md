@@ -40,7 +40,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Closed |
 | [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Open   |
 | [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation                | Large  | Open   |
-| [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing mini-app     | Medium | Open   |
+| [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Open   |
 
 ### Proposing a New Prize
 
@@ -68,6 +68,16 @@ If multiple solutions target the same prize, the first submission that satisfies
 > **λ**Prize launched at **Parallel Society**, a Logos-run event in Lisbon on **6–7 March 2026**, via a dedicated hackathon platform. Submissions for LP-0013 and LP-0014 were received during the event.
 >
 > Submissions through this repository are now open and follow the standard first-come-first-served process. However, Parallel Society submissions that are still being evaluated take precedence.
+
+### Evaluation Policies
+
+The following policies apply to **all** prizes unless a specific prize states otherwise.
+
+**Submissions.** Each builder (or team) is allowed a maximum of **3 submissions** per prize, with at most **one submission/review per week**.
+
+**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders.
+
+**Demo requirements.** Every submission that requires a demo must include a narrated video walkthrough in which the builder explains what they built and why, walks through the architecture and key implementation decisions, and demonstrates the full end-to-end flow. A silent screencast without explanation is not sufficient. Prize-specific demo content is listed in each prize's **Submission Requirements**.
 
 ## Terms & Conditions
 
