@@ -1,0 +1,26 @@
+[package]
+name = "lez-blend"
+version = "0.1.0"
+edition = "2021"
+description = "Blend proposer-anonymity: Sphinx packets, adaptive delays, cover traffic, VRF mix selection, decoy broadcast"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["std"]
+std = ["serde/derive", "serde_json"]
+
+[dependencies]
+serde         = { version = "1", features = ["derive"] }
+serde_json    = { version = "1", optional = true }
+thiserror     = "2"
+rand          = { version = "0.8", features = ["std_rng", "small_rng"] }
+blake3        = "1"
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+x25519-dalek  = { version = "2", features = ["static_secrets"] }
+sha2          = "0.10"
+zeroize       = { version = "1", features = ["zeroize_derive"] }
+cryptarchia-lll = { path = "../cryptarchia-lll" }
+
+[dev-dependencies]
+serde_json    = "1"
+x25519-dalek  = { version = "2", features = ["static_secrets"] }

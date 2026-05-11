@@ -1,0 +1,21 @@
+[package]
+name = "lez-events-cli"
+version = "0.3.0"
+edition = "2021"
+description = "Reliability-focused CLI for decoding and exploring LEZ event receipts"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "lez-events"
+path = "src/main.rs"
+
+[dependencies]
+lez-events = { path = "../lez-events", features = ["std", "encryption"] }
+clap       = { version = "4", features = ["derive", "env"] }
+hex        = "0.4"
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest    = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+thiserror  = "1"
+anyhow     = "1"
+aes-gcm    = "0.10"
