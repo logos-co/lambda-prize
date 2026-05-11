@@ -1,0 +1,240 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  body {
+    background-color: rgb(2 6 23);
+    color: rgb(241 245 249);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(51 65 85) transparent;
+  }
+
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgb(51 65 85);
+    border-radius: 3px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(71 85 105);
+  }
+}
+
+@layer utilities {
+  .card {
+    @apply rounded-2xl border border-slate-800 bg-slate-900
+      transition-colors duration-200 hover:border-slate-700/80;
+  }
+
+  .card-inner {
+    @apply rounded-xl border border-slate-700/50 bg-slate-800/60;
+  }
+
+  .label-xs {
+    @apply text-xs font-medium uppercase tracking-widest text-slate-500;
+  }
+
+  .stat-value {
+    @apply tabular-nums text-2xl font-bold text-slate-100;
+  }
+
+  .btn-primary {
+    @apply rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white
+      shadow-sm shadow-violet-900/50
+      transition-all duration-150
+      hover:bg-violet-500 hover:shadow-violet-700/40
+      active:scale-95 active:bg-violet-700
+      disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none;
+  }
+
+  .btn-ghost {
+    @apply rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium
+      text-slate-300 transition-all duration-150
+      hover:border-slate-600 hover:bg-slate-800
+      active:scale-95
+      disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-danger {
+    @apply rounded-xl bg-rose-700/20 border border-rose-700/30 px-4 py-2
+      text-sm font-medium text-rose-400 transition-all duration-150
+      hover:bg-rose-700/30 active:scale-95
+      disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .input-dark {
+    @apply rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-sm
+      text-slate-100 placeholder-slate-500 outline-none transition-colors
+      focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30;
+  }
+
+  .badge-emerald {
+    @apply rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400
+      ring-1 ring-emerald-500/20;
+  }
+
+  .badge-violet {
+    @apply rounded-full bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400
+      ring-1 ring-violet-500/20;
+  }
+
+  .badge-rose {
+    @apply rounded-full bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400
+      ring-1 ring-rose-500/20;
+  }
+
+  .badge-amber {
+    @apply rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400
+      ring-1 ring-amber-500/20;
+  }
+
+  .badge-blue {
+    @apply rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400
+      ring-1 ring-blue-500/20;
+  }
+
+  .badge-slate {
+    @apply rounded-full bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-400
+      ring-1 ring-slate-500/20;
+  }
+
+  .live-dot {
+    @apply inline-block h-2 w-2 rounded-full bg-emerald-400;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  .mono {
+    @apply font-mono text-sm;
+  }
+
+  /* Shimmer skeleton */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgb(30 41 59 / 0) 0%,
+      rgb(51 65 85 / 0.35) 50%,
+      rgb(30 41 59 / 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+
+  /* Trend arrows */
+  .trend-up   { @apply text-emerald-400 text-xs font-bold; }
+  .trend-down { @apply text-rose-400 text-xs font-bold; }
+  .trend-flat { @apply text-slate-600 text-xs; }
+}
+
+/* ── core animations ─────────────────────────────────────────────────── */
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.8); }
+}
+
+@keyframes slot-tick {
+  0%   { transform: translateY(-18px) scale(0.9); opacity: 0; }
+  55%  { transform: translateY(2px)   scale(1.02); opacity: 1; }
+  100% { transform: translateY(0)     scale(1);    opacity: 1; }
+}
+
+@keyframes vrf-update {
+  0%   { opacity: 0; letter-spacing: 0.25em; filter: blur(4px); }
+  100% { opacity: 1; letter-spacing: 0;      filter: blur(0); }
+}
+
+@keyframes health-fill {
+  0%   { width: 0%; }
+}
+
+@keyframes packet-slide {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateX(100%);  opacity: 0; }
+}
+
+@keyframes slot-flash {
+  0%   { background-color: rgb(139 92 246 / 0.18); }
+  100% { background-color: transparent; }
+}
+
+@keyframes win-glow {
+  0%   { box-shadow: 0 0 0  0   rgb(52 211 153 / 0.5); }
+  40%  { box-shadow: 0 0 20px 6px rgb(52 211 153 / 0.25); }
+  100% { box-shadow: 0 0 0  0   rgb(52 211 153 / 0); }
+}
+
+@keyframes sparkline-draw {
+  from { stroke-dashoffset: 200; }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* ── toast countdown (origin-left, shrinks to 0 width) ───────────────── */
+
+@keyframes countdown {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+/* ── toast slide-in ──────────────────────────────────────────────────── */
+
+@keyframes toast-in {
+  0%   { transform: translateX(110%); opacity: 0; }
+  100% { transform: translateX(0);    opacity: 1; }
+}
+
+.toast-enter {
+  animation: toast-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ── onboarding gradient bar ─────────────────────────────────────────── */
+
+@keyframes gradient-sweep {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ── named helper classes ────────────────────────────────────────────── */
+
+.slot-tick-anim {
+  animation: slot-tick 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.vrf-update-anim {
+  animation: vrf-update 0.4s ease-out both;
+}
+
+.packet-anim {
+  animation: packet-slide 1.3s ease-in-out forwards;
+}
+
+.slot-new {
+  animation: slot-flash 0.6s ease-out forwards;
+}
+
+.slot-won {
+  animation: win-glow 1.6s ease-in-out;
+}
+
+/* ── focus-visible ring ──────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid rgb(139 92 246 / 0.7);
+  outline-offset: 2px;
+}
