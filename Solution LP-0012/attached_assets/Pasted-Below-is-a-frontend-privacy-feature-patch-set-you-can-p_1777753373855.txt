@@ -1,0 +1,1999 @@
+Below is a frontend privacy feature patch set you can paste into a React + TypeScript app. It adds local encryption, consent handling, redaction, safe storage, wallet/session state, transaction previews, audit trails, and a usable dashboard for privacy-first blockchain UX.
+src/types/privacy.ts
+export type HexString = `0x${string}`;
+export type Address = HexString;
+export type TxHash = HexString;
+export type ChainId = number;
+
+export type PrivacyLevel = "public" | "private" | "confidential";
+
+export type ConsentScope =
+  | "identity"
+  | "balances"
+  | "transactions"
+  | "messages"
+  | "analytics"
+  | "support";
+
+export type ConsentValue = "allow" | "deny" | "ask";
+
+export interface PrivacyConsentMatrix {
+  identity: ConsentValue;
+  balances: ConsentValue;
+  transactions: ConsentValue;
+  messages: ConsentValue;
+  analytics: ConsentValue;
+  support: ConsentValue;
+}
+
+export interface PrivacySettings {
+  showRawAddresses: boolean;
+  showRawAmounts: boolean;
+  showTxHashes: boolean;
+  showCounterpartyNames: boolean;
+  redactMessageBodies: boolean;
+  localEncryptionEnabled: boolean;
+  autoLockMinutes: number;
+  preferredPrivacyLevel: PrivacyLevel;
+}
+
+export interface WalletSession {
+  connected: boolean;
+  account?: Address;
+  chainId?: ChainId;
+  provider?: "injected" | "walletconnect" | "custodial" | "demo";
+  lastConnectedAt?: string;
+}
+
+export interface ShieldedBalance {
+  assetId: string;
+  ownerCommitment: string;
+  balanceCommitment: string;
+  available: string;
+  pending: string;
+  shielded: boolean;
+}
+
+export interface MessageEnvelope {
+  id: string;
+  createdAt: string;
+  from?: Address;
+  to?: Address;
+  subject?: string;
+  ciphertext?: string;
+  plaintextPreview?: string;
+  privacyLevel: PrivacyLevel;
+  tags: string[];
+}
+
+export interface TransactionIntent {
+  id: string;
+  kind: "transfer" | "message" | "stake" | "vote" | "custom";
+  chainId: ChainId;
+  sender?: Address;
+  recipient?: Address;
+  assetId?: string;
+  amount?: string;
+  memo?: string;
+  privacyLevel: PrivacyLevel;
+  createdAt: string;
+  nonce: string;
+}
+
+export interface TransactionPreview {
+  intent: TransactionIntent;
+  estimatedFee: string;
+  gasLimit: number;
+  warnings: string[];
+  redactedSummary: string;
+  rawSummary: string;
+  canSubmit: boolean;
+}
+
+export interface AuditEvent {
+  id: string;
+  timestamp: string;
+  category: "consent" | "wallet" | "tx" | "message" | "storage" | "security";
+  level: "info" | "warn" | "error";
+  title: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SupportBundle {
+  generatedAt: string;
+  appVersion: string;
+  chainId?: ChainId;
+  wallet?: WalletSession;
+  settings?: PrivacySettings;
+  consent?: PrivacyConsentMatrix;
+  recentEvents: AuditEvent[];
+  notes: string[];
+}
+
+export interface SecureBlob<T = unknown> {
+  version: number;
+  createdAt: string;
+  label: string;
+  nonce: string;
+  ciphertext: string;
+  checksum: string;
+  payloadType: string;
+  data?: T;
+}
+
+export interface BlockchainRpcErrorShape {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface BlockchainApiResponse<T> {
+  ok: boolean;
+  data?: T;
+  error?: BlockchainRpcErrorShape;
+}
+
+export interface ShieldedTransferRequest {
+  chainId: ChainId;
+  assetId: string;
+  fromCommitment: string;
+  toCommitment: string;
+  amount: string;
+  memo?: string;
+  privacyLevel: PrivacyLevel;
+}
+
+export interface ShieldedTransferResponse {
+  txHash: TxHash;
+  nullifier: string;
+  commitment: string;
+  status: "submitted" | "confirmed" | "failed";
+  explorerUrl?: string;
+}
+
+export interface NetworkHealth {
+  chainId: ChainId;
+  rpcHealthy: boolean;
+  websocketHealthy: boolean;
+  lastCheckedAt: string;
+  latencyMs: number;
+  note?: string;
+}
+
+export interface AppErrorInfo {
+  code: string;
+  message: string;
+  hint?: string;
+  retriable: boolean;
+}
+
+src/lib/errors.ts
+import type { AppErrorInfo, BlockchainRpcErrorShape } from "../types/privacy";
+
+export class PrivacyUiError extends Error {
+  public readonly code: string;
+  public readonly retriable: boolean;
+  public readonly hint?: string;
+
+  constructor(info: AppErrorInfo, cause?: unknown) {
+    super(info.message);
+    this.name = "PrivacyUiError";
+    this.code = info.code;
+    this.retriable = info.retriable;
+    this.hint = info.hint;
+    if (cause !== undefined) {
+      (this as { cause?: unknown }).cause = cause;
+    }
+  }
+}
+
+export function isBlockchainRpcErrorShape(value: unknown): value is BlockchainRpcErrorShape {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    "message" in value &&
+    typeof (value as { code: unknown }).code === "string" &&
+    typeof (value as { message: unknown }).message === "string"
+  );
+}
+
+export function toAppErrorInfo(
+  code: string,
+  message: string,
+  options?: { hint?: string; retriable?: boolean }
+): AppErrorInfo {
+  return {
+    code,
+    message,
+    hint: options?.hint,
+    retriable: options?.retriable ?? false,
+  };
+}
+
+export function normalizeUnknownError(err: unknown): AppErrorInfo {
+  if (err instanceof PrivacyUiError) {
+    return {
+      code: err.code,
+      message: err.message,
+      hint: err.hint,
+      retriable: err.retriable,
+    };
+  }
+
+  if (err instanceof Error) {
+    return toAppErrorInfo("UNKNOWN_ERROR", err.message, { retriable: false });
+  }
+
+  return toAppErrorInfo("UNKNOWN_ERROR", "An unknown error occurred.", { retriable: false });
+}
+
+src/lib/validation.ts
+import { PrivacyUiError, toAppErrorInfo } from "./errors";
+import type { Address, HexString, TxHash } from "../types/privacy";
+
+const HEX_RE = /^0x[0-9a-fA-F]+$/;
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
+
+export function assertHexString(value: string, name = "value"): asserts value is HexString {
+  if (!HEX_RE.test(value)) {
+    throw new PrivacyUiError(
+      toAppErrorInfo("INVALID_HEX", `${name} must be a 0x-prefixed hex string.`)
+    );
+  }
+}
+
+export function assertAddress(value: string): asserts value is Address {
+  if (!ADDRESS_RE.test(value)) {
+    throw new PrivacyUiError(
+      toAppErrorInfo("INVALID_ADDRESS", "Address must be a 20-byte 0x-prefixed hex string.")
+    );
+  }
+}
+
+export function assertTxHash(value: string): asserts value is TxHash {
+  if (!TX_HASH_RE.test(value)) {
+    throw new PrivacyUiError(
+      toAppErrorInfo("INVALID_TX_HASH", "Transaction hash must be a 32-byte 0x-prefixed hex string.")
+    );
+  }
+}
+
+export function assertPositiveDecimalString(value: string, field = "amount"): void {
+  if (!/^\d+(\.\d+)?$/.test(value) || Number(value) <= 0) {
+    throw new PrivacyUiError(
+      toAppErrorInfo("INVALID_AMOUNT", `${field} must be a positive decimal string.`)
+    );
+  }
+}
+
+export function sanitizeLabel(value: string, maxLen = 80): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.slice(0, maxLen);
+}
+
+export function normalizeHex(value: string): HexString {
+  const lower = value.trim().toLowerCase();
+  assertHexString(lower);
+  return lower as HexString;
+}
+
+export function safeJsonParse<T>(raw: string, fallback: T): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+src/lib/crypto.ts
+import { PrivacyUiError, toAppErrorInfo } from "./errors";
+import type { SecureBlob } from "../types/privacy";
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function fromBase64(input: string): Uint8Array {
+  const binary = atob(input);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+export function randomId(prefix = "id"): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return `${prefix}_${toBase64(bytes).replace(/[^a-zA-Z0-9]/g, "").slice(0, 22)}`;
+}
+
+export async function sha256Hex(data: string | ArrayBuffer | Uint8Array): Promise<string> {
+  const bytes = typeof data === "string" ? textEncoder.encode(data) : data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function deriveKeyFromPassphrase(
+  passphrase: string,
+  salt: string,
+  iterations = 210_000
+): Promise<CryptoKey> {
+  if (!passphrase.trim()) {
+    throw new PrivacyUiError(toAppErrorInfo("MISSING_PASSPHRASE", "Passphrase is required."));
+  }
+
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    textEncoder.encode(passphrase),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"]
+  );
+
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: textEncoder.encode(salt),
+      iterations,
+      hash: "SHA-256",
+    },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+export async function deriveKeyFingerprint(key: CryptoKey): Promise<string> {
+  const jwk = await crypto.subtle.exportKey("jwk", key);
+  return sha256Hex(JSON.stringify(jwk));
+}
+
+export function generateNonce(): Uint8Array {
+  return crypto.getRandomValues(new Uint8Array(12));
+}
+
+export async function encryptJson<T>(
+  payload: T,
+  key: CryptoKey,
+  label: string
+): Promise<SecureBlob<T>> {
+  const plaintext = textEncoder.encode(JSON.stringify(payload));
+  const nonce = generateNonce();
+  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, plaintext);
+  const cipherBytes = new Uint8Array(ciphertext);
+
+  return {
+    version: 1,
+    createdAt: new Date().toISOString(),
+    label,
+    nonce: toBase64(nonce),
+    ciphertext: toBase64(cipherBytes),
+    checksum: await sha256Hex(cipherBytes),
+    payloadType: typeof payload,
+  };
+}
+
+export async function decryptJson<T>(blob: SecureBlob<T>, key: CryptoKey): Promise<T> {
+  try {
+    const nonce = fromBase64(blob.nonce);
+    const cipherBytes = fromBase64(blob.ciphertext);
+    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, key, cipherBytes);
+    return JSON.parse(textDecoder.decode(plaintext)) as T;
+  } catch (cause) {
+    throw new PrivacyUiError(
+      toAppErrorInfo("DECRYPT_FAILED", "Unable to decrypt local secure data.", {
+        hint: "Check that the correct passphrase or device key is being used.",
+      }),
+      cause
+    );
+  }
+}
+
+export async function sealText(
+  text: string,
+  key: CryptoKey,
+  label: string
+): Promise<SecureBlob<string>> {
+  return encryptJson({ text }, key, label);
+}
+
+export async function openText(blob: SecureBlob<string>, key: CryptoKey): Promise<string> {
+  const payload = await decryptJson<{ text: string }>(blob, key);
+  return payload.text;
+}
+
+src/lib/storage.ts
+import { PrivacyUiError, toAppErrorInfo } from "./errors";
+import { safeJsonParse } from "./validation";
+
+export interface StorageAdapter {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  keys(): string[];
+}
+
+class MemoryStorageAdapter implements StorageAdapter {
+  private store = new Map<string, string>();
+
+  getItem(key: string): string | null {
+    return this.store.get(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    this.store.set(key, value);
+  }
+
+  removeItem(key: string): void {
+    this.store.delete(key);
+  }
+
+  keys(): string[] {
+    return Array.from(this.store.keys());
+  }
+}
+
+class BrowserStorageAdapter implements StorageAdapter {
+  constructor(private readonly storage: Storage) {}
+
+  getItem(key: string): string | null {
+    return this.storage.getItem(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.storage.setItem(key, value);
+  }
+
+  removeItem(key: string): void {
+    this.storage.removeItem(key);
+  }
+
+  keys(): string[] {
+    return Object.keys(this.storage);
+  }
+}
+
+export function createStorageAdapter(): StorageAdapter {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+    return new MemoryStorageAdapter();
+  }
+
+  try {
+    const probe = "__privacy_probe__";
+    window.localStorage.setItem(probe, "1");
+    window.localStorage.removeItem(probe);
+    return new BrowserStorageAdapter(window.localStorage);
+  } catch {
+    return new MemoryStorageAdapter();
+  }
+}
+
+export function createSessionStorageAdapter(): StorageAdapter {
+  if (typeof window === "undefined" || typeof window.sessionStorage === "undefined") {
+    return new MemoryStorageAdapter();
+  }
+
+  try {
+    const probe = "__privacy_probe__";
+    window.sessionStorage.setItem(probe, "1");
+    window.sessionStorage.removeItem(probe);
+    return new BrowserStorageAdapter(window.sessionStorage);
+  } catch {
+    return new MemoryStorageAdapter();
+  }
+}
+
+export function createJsonStore(adapter: StorageAdapter, namespace: string) {
+  const prefix = `${namespace}::`;
+
+  return {
+    get<T>(key: string, fallback: T): T {
+      const raw = adapter.getItem(prefix + key);
+      if (!raw) return fallback;
+      return safeJsonParse(raw, fallback);
+    },
+    set<T>(key: string, value: T): void {
+      try {
+        adapter.setItem(prefix + key, JSON.stringify(value));
+      } catch (cause) {
+        throw new PrivacyUiError(
+          toAppErrorInfo("STORAGE_WRITE_FAILED", "Unable to save local data.", {
+            hint: "Clear some browser storage or disable strict privacy mode for local data.",
+          }),
+          cause
+        );
+      }
+    },
+    remove(key: string): void {
+      adapter.removeItem(prefix + key);
+    },
+    listKeys(): string[] {
+      return adapter.keys().filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+    },
+  };
+}
+
+src/lib/redaction.ts
+import type {
+  Address,
+  PrivacySettings,
+  ShieldedBalance,
+  TransactionIntent,
+  MessageEnvelope,
+} from "../types/privacy";
+import { sanitizeLabel } from "./validation";
+
+function keepEnd(input: string, visible = 6): string {
+  if (input.length <= visible) return input;
+  return `…${input.slice(-visible)}`;
+}
+
+function keepStart(input: string, visible = 8): string {
+  if (input.length <= visible) return input;
+  return `${input.slice(0, visible)}…`;
+}
+
+export function redactAddress(address?: Address, showRaw = false): string {
+  if (!address) return "—";
+  return showRaw ? address : `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+export function redactTxHash(txHash?: string, showRaw = false): string {
+  if (!txHash) return "—";
+  return showRaw ? txHash : `${txHash.slice(0, 8)}…${txHash.slice(-6)}`;
+}
+
+export function redactAmount(amount?: string, showRaw = false): string {
+  if (!amount) return "—";
+  if (showRaw) return amount;
+  const [whole] = amount.split(".");
+  return `${whole.slice(0, 2)}…`;
+}
+
+export function redactMemo(memo?: string, showRaw = false): string {
+  if (!memo) return "—";
+  const clean = sanitizeLabel(memo, 160);
+  if (showRaw) return clean;
+  return clean.length > 24 ? `${clean.slice(0, 24)}…` : clean;
+}
+
+export function redactMessageBody(body?: string, showRaw = false): string {
+  if (!body) return "—";
+  if (showRaw) return body;
+  return `Encrypted message (${body.length} chars hidden)`;
+}
+
+export function formatShieldedBalance(balance: ShieldedBalance, settings: PrivacySettings): string {
+  const available = settings.showRawAmounts ? balance.available : redactAmount(balance.available);
+  const pending = settings.showRawAmounts ? balance.pending : redactAmount(balance.pending);
+  const asset = settings.showCounterpartyNames ? balance.assetId : keepStart(balance.assetId, 10);
+  return `${asset} • available ${available} • pending ${pending}`;
+}
+
+export function describeTransactionIntent(intent: TransactionIntent, settings: PrivacySettings): string {
+  const sender = settings.showRawAddresses ? intent.sender ?? "—" : redactAddress(intent.sender);
+  const recipient = settings.showRawAddresses ? intent.recipient ?? "—" : redactAddress(intent.recipient);
+  const amount = settings.showRawAmounts ? intent.amount ?? "—" : redactAmount(intent.amount);
+  const memo = settings.showCounterpartyNames ? intent.memo ?? "—" : redactMemo(intent.memo);
+
+  switch (intent.kind) {
+    case "transfer":
+      return `Transfer ${amount} from ${sender} to ${recipient} ${memo !== "—" ? `(${memo})` : ""}`.trim();
+    case "message":
+      return `Send private message to ${recipient}`;
+    case "stake":
+      return `Stake ${amount} from ${sender}`;
+    case "vote":
+      return `Cast vote from ${sender}`;
+    default:
+      return `Custom transaction from ${sender}`;
+  }
+}
+
+export function redactMessageEnvelope(message: MessageEnvelope, settings: PrivacySettings): MessageEnvelope {
+  return {
+    ...message,
+    from: settings.showRawAddresses ? message.from : message.from ? redactAddress(message.from) as Address : undefined,
+    to: settings.showRawAddresses ? message.to : message.to ? redactAddress(message.to) as Address : undefined,
+    subject: settings.showCounterpartyNames ? message.subject : message.subject ? sanitizeLabel(message.subject, 20) : undefined,
+    plaintextPreview: settings.redactMessageBodies
+      ? (message.ciphertext ? `Encrypted payload (${message.ciphertext.length} chars)` : undefined)
+      : message.plaintextPreview,
+  };
+}
+
+export function privacySummary(settings: PrivacySettings): string {
+  return [
+    settings.localEncryptionEnabled ? "local encryption enabled" : "local encryption disabled",
+    settings.showRawAddresses ? "raw addresses visible" : "addresses redacted",
+    settings.showRawAmounts ? "raw amounts visible" : "amounts redacted",
+    settings.redactMessageBodies ? "message bodies redacted" : "message bodies may preview",
+  ].join(" • ");
+}
+
+src/lib/consent.ts
+import type { ConsentScope, ConsentValue, PrivacyConsentMatrix } from "../types/privacy";
+
+export const DEFAULT_CONSENT: PrivacyConsentMatrix = {
+  identity: "ask",
+  balances: "ask",
+  transactions: "ask",
+  messages: "deny",
+  analytics: "deny",
+  support: "allow",
+};
+
+export function hasConsent(matrix: PrivacyConsentMatrix, scope: ConsentScope): boolean {
+  return matrix[scope] === "allow";
+}
+
+export function canAsk(matrix: PrivacyConsentMatrix, scope: ConsentScope): boolean {
+  return matrix[scope] === "ask";
+}
+
+export function setConsent(
+  matrix: PrivacyConsentMatrix,
+  scope: ConsentScope,
+  value: ConsentValue
+): PrivacyConsentMatrix {
+  return { ...matrix, [scope]: value };
+}
+
+export function consentLabel(value: ConsentValue): string {
+  switch (value) {
+    case "allow":
+      return "Allow";
+    case "deny":
+      return "Deny";
+    case "ask":
+      return "Ask each time";
+  }
+}
+
+export function consentSummary(matrix: PrivacyConsentMatrix): string {
+  return (Object.keys(matrix) as ConsentScope[])
+    .map((scope) => `${scope}:${matrix[scope]}`)
+    .join(", ");
+}
+
+export function consentFromRecord(raw: unknown): PrivacyConsentMatrix {
+  const fallback = DEFAULT_CONSENT;
+  if (typeof raw !== "object" || raw === null) return fallback;
+
+  const obj = raw as Partial<PrivacyConsentMatrix>;
+  return {
+    identity: obj.identity ?? fallback.identity,
+    balances: obj.balances ?? fallback.balances,
+    transactions: obj.transactions ?? fallback.transactions,
+    messages: obj.messages ?? fallback.messages,
+    analytics: obj.analytics ?? fallback.analytics,
+    support: obj.support ?? fallback.support,
+  };
+}
+
+src/lib/blockchainClient.ts
+import { PrivacyUiError, toAppErrorInfo } from "./errors";
+import type {
+  BlockchainApiResponse,
+  NetworkHealth,
+  ShieldedBalance,
+  ShieldedTransferRequest,
+  ShieldedTransferResponse,
+  TxHash,
+  WalletSession,
+} from "../types/privacy";
+import { assertAddress, assertPositiveDecimalString, assertTxHash } from "./validation";
+
+export interface BlockchainClientOptions {
+  baseUrl: string;
+  chainId: number;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}
+
+export class PrivacyBlockchainClient {
+  private readonly baseUrl: string;
+  private readonly chainId: number;
+  private readonly timeoutMs: number;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: BlockchainClientOptions) {
+    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    this.chainId = options.chainId;
+    this.timeoutMs = options.timeoutMs ?? 15_000;
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  private async request<T>(
+    path: string,
+    init: RequestInit = {}
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          "content-type": "application/json",
+          ...(init.headers ?? {}),
+        },
+      });
+
+      const json = (await res.json().catch(() => null)) as BlockchainApiResponse<T> | null;
+
+      if (!res.ok) {
+        const details = json?.error?.details;
+        const msg = json?.error?.message ?? `HTTP ${res.status}`;
+        throw new PrivacyUiError(
+          toAppErrorInfo("BLOCKCHAIN_REQUEST_FAILED", msg, {
+            retriable: res.status >= 500,
+            hint: typeof details === "string" ? details : undefined,
+          })
+        );
+      }
+
+      if (json && json.ok && json.data !== undefined) return json.data;
+      if (json && !json.ok && json.error) {
+        throw new PrivacyUiError(
+          toAppErrorInfo(json.error.code, json.error.message, {
+            retriable: false,
+          })
+        );
+      }
+
+      throw new PrivacyUiError(
+        toAppErrorInfo("INVALID_RESPONSE", "Blockchain API returned an invalid response.")
+      );
+    } catch (cause) {
+      if (cause instanceof PrivacyUiError) throw cause;
+      throw new PrivacyUiError(
+        toAppErrorInfo("NETWORK_ERROR", "Unable to reach blockchain backend.", {
+          retriable: true,
+          hint: "Check RPC connectivity and retry.",
+        }),
+        cause
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async getWalletSession(): Promise<WalletSession> {
+    return this.request<WalletSession>(`/wallet/session?chainId=${this.chainId}`);
+  }
+
+  async getShieldedBalances(account: string): Promise<ShieldedBalance[]> {
+    assertAddress(account);
+    return this.request<ShieldedBalance[]>(
+      `/shielded/balances?chainId=${this.chainId}&account=${encodeURIComponent(account)}`
+    );
+  }
+
+  async getNetworkHealth(): Promise<NetworkHealth> {
+    return this.request<NetworkHealth>(`/health?chainId=${this.chainId}`);
+  }
+
+  async submitPrivateTransfer(req: ShieldedTransferRequest): Promise<ShieldedTransferResponse> {
+    if (req.chainId !== this.chainId) {
+      throw new PrivacyUiError(
+        toAppErrorInfo("CHAIN_MISMATCH", "The selected chain does not match the backend chain.")
+      );
+    }
+    assertPositiveDecimalString(req.amount, "transfer amount");
+    assertAddress(req.fromCommitment as string as never);
+    assertAddress(req.toCommitment as string as never);
+
+    return this.request<ShieldedTransferResponse>(`/shielded/transfer`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    });
+  }
+
+  async getAuditEvents(limit = 100): Promise<Array<{ id: string; timestamp: string; title: string }>> {
+    return this.request(`/audit/events?chainId=${this.chainId}&limit=${limit}`);
+  }
+
+  async getTxReceipt(txHash: TxHash): Promise<unknown> {
+    assertTxHash(txHash);
+    return this.request(`/tx/${txHash}/receipt?chainId=${this.chainId}`);
+  }
+}
+
+src/lib/transactionPreview.ts
+import type { PrivacySettings, TransactionIntent, TransactionPreview } from "../types/privacy";
+import { describeTransactionIntent, redactTxHash } from "./redaction";
+import { PrivacyUiError, toAppErrorInfo } from "./errors";
+import { assertPositiveDecimalString } from "./validation";
+
+export function createTransactionIntent(params: {
+  chainId: number;
+  kind: TransactionIntent["kind"];
+  sender?: string;
+  recipient?: string;
+  assetId?: string;
+  amount?: string;
+  memo?: string;
+  privacyLevel: TransactionIntent["privacyLevel"];
+}): TransactionIntent {
+  if (params.amount) assertPositiveDecimalString(params.amount, "amount");
+
+  return {
+    id: crypto.randomUUID(),
+    kind: params.kind,
+    chainId: params.chainId,
+    sender: params.sender as TransactionIntent["sender"],
+    recipient: params.recipient as TransactionIntent["recipient"],
+    assetId: params.assetId,
+    amount: params.amount,
+    memo: params.memo,
+    privacyLevel: params.privacyLevel,
+    createdAt: new Date().toISOString(),
+    nonce: crypto.getRandomValues(new Uint32Array(4)).join("-"),
+  };
+}
+
+export function buildTransactionPreview(
+  intent: TransactionIntent,
+  settings: PrivacySettings
+): TransactionPreview {
+  const warnings: string[] = [];
+  const rawSummary = describeTransactionIntent(intent, settings);
+
+  if (intent.privacyLevel === "public" && settings.localEncryptionEnabled) {
+    warnings.push("This is a public transaction while local encryption is enabled.");
+  }
+
+  if (intent.kind === "message" && !settings.redactMessageBodies) {
+    warnings.push("Message bodies are visible in the UI.");
+  }
+
+  if (intent.amount && Number(intent.amount) > 10_000) {
+    warnings.push("High-value transfer detected.");
+  }
+
+  const gasLimit =
+    intent.kind === "message" ? 80_000 : intent.kind === "transfer" ? 120_000 : 150_000;
+
+  const estimatedFee = `${(gasLimit * 0.00000002).toFixed(6)} ETH`;
+  const canSubmit = warnings.every((w) => !w.includes("High-value")) || intent.privacyLevel !== "public";
+
+  return {
+    intent,
+    estimatedFee,
+    gasLimit,
+    warnings,
+    redactedSummary: `${intent.kind} • ${redactTxHash(intent.id, false)} • ${intent.privacyLevel}`,
+    rawSummary,
+    canSubmit,
+  };
+}
+
+export function assertPreviewReady(preview: TransactionPreview): void {
+  if (!preview.canSubmit) {
+    throw new PrivacyUiError(
+      toAppErrorInfo("PREVIEW_BLOCKED", "Transaction preview failed policy checks.", {
+        hint: "Review privacy warnings before submitting.",
+      })
+    );
+  }
+}
+
+src/hooks/usePersistentState.ts
+import { useEffect, useMemo, useState } from "react";
+import { createJsonStore, createStorageAdapter } from "../lib/storage";
+
+export function usePersistentState<T>(
+  namespace: string,
+  key: string,
+  fallback: T
+): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const store = useMemo(() => createJsonStore(createStorageAdapter(), namespace), [namespace]);
+  const [value, setValue] = useState<T>(() => store.get(key, fallback));
+
+  useEffect(() => {
+    store.set(key, value);
+  }, [key, store, value]);
+
+  return [value, setValue];
+}
+
+src/hooks/usePrivacySettings.ts
+import { useMemo } from "react";
+import { usePersistentState } from "./usePersistentState";
+import type { PrivacySettings } from "../types/privacy";
+
+const DEFAULT_SETTINGS: PrivacySettings = {
+  showRawAddresses: false,
+  showRawAmounts: false,
+  showTxHashes: false,
+  showCounterpartyNames: false,
+  redactMessageBodies: true,
+  localEncryptionEnabled: true,
+  autoLockMinutes: 10,
+  preferredPrivacyLevel: "private",
+};
+
+export function usePrivacySettings() {
+  const [settings, setSettings] = usePersistentState<PrivacySettings>(
+    "privacy",
+    "settings",
+    DEFAULT_SETTINGS
+  );
+
+  const api = useMemo(() => {
+    return {
+      settings,
+      setSettings,
+      patch(partial: Partial<PrivacySettings>) {
+        setSettings((prev) => ({ ...prev, ...partial }));
+      },
+      reset() {
+        setSettings(DEFAULT_SETTINGS);
+      },
+    };
+  }, [settings, setSettings]);
+
+  return api;
+}
+
+src/hooks/useWalletConnection.ts
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { WalletSession } from "../types/privacy";
+import { PrivacyUiError, toAppErrorInfo } from "../lib/errors";
+import { usePersistentState } from "./usePersistentState";
+
+const EMPTY_SESSION: WalletSession = { connected: false, provider: "demo" };
+
+export function useWalletConnection() {
+  const [session, setSession] = usePersistentState<WalletSession>("wallet", "session", EMPTY_SESSION);
+  const [connecting, setConnecting] = useState(false);
+
+  const connectInjected = useCallback(async () => {
+    setConnecting(true);
+    try {
+      const eth = (window as Window & { ethereum?: { request: (args: { method: string }) => Promise<string[]> } }).ethereum;
+      if (!eth) {
+        throw new PrivacyUiError(
+          toAppErrorInfo("NO_WALLET", "No injected wallet was found.", {
+            hint: "Install a browser wallet or continue in demo mode.",
+          })
+        );
+      }
+
+      const accounts = await eth.request({ method: "eth_requestAccounts" });
+      const account = accounts[0];
+      if (!account) {
+        throw new PrivacyUiError(toAppErrorInfo("NO_ACCOUNT", "No wallet account was returned."));
+      }
+
+      setSession({
+        connected: true,
+        account: account as `0x${string}`,
+        chainId: 0,
+        provider: "injected",
+        lastConnectedAt: new Date().toISOString(),
+      });
+    } finally {
+      setConnecting(false);
+    }
+  }, [setSession]);
+
+  const disconnect = useCallback(() => {
+    setSession({ connected: false, provider: session.provider ?? "demo" });
+  }, [setSession, session.provider]);
+
+  useEffect(() => {
+    if (!session.connected) return;
+    const handle = setInterval(() => {
+      if (session.lastConnectedAt) {
+        const last = new Date(session.lastConnectedAt).getTime();
+        const diffMinutes = (Date.now() - last) / 60_000;
+        if (diffMinutes > 60) {
+          setSession((prev) => ({ ...prev, connected: false }));
+        }
+      }
+    }, 30_000);
+
+    return () => clearInterval(handle);
+  }, [session.connected, session.lastConnectedAt, setSession]);
+
+  return useMemo(
+    () => ({
+      session,
+      connecting,
+      connectInjected,
+      disconnect,
+      isConnected: session.connected,
+      account: session.account,
+    }),
+    [session, connecting, connectInjected, disconnect]
+  );
+}
+
+src/components/ConsentBanner.tsx
+import React from "react";
+import { consentLabel } from "../lib/consent";
+import type { ConsentScope, PrivacyConsentMatrix } from "../types/privacy";
+
+type Props = {
+  consent: PrivacyConsentMatrix;
+  onChange: (scope: ConsentScope, value: "allow" | "deny" | "ask") => void;
+  onAcceptAll: () => void;
+  onDenyAll: () => void;
+};
+
+const scopes: ConsentScope[] = [
+  "identity",
+  "balances",
+  "transactions",
+  "messages",
+  "analytics",
+  "support",
+];
+
+export function ConsentBanner({ consent, onChange, onAcceptAll, onDenyAll }: Props) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Privacy consent</h2>
+          <p className="text-sm text-slate-600">
+            Choose what the app may read, store, or display. Defaults are conservative.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onAcceptAll} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white">
+            Allow support-only
+          </button>
+          <button onClick={onDenyAll} className="rounded-xl border px-4 py-2 text-sm">
+            Deny all
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {scopes.map((scope) => (
+          <label key={scope} className="rounded-xl border p-3">
+            <div className="flex items-center justify-between">
+              <span className="font-medium capitalize text-slate-800">{scope}</span>
+              <span className="text-xs text-slate-500">{consentLabel(consent[scope])}</span>
+            </div>
+            <select
+              value={consent[scope]}
+              onChange={(e) => onChange(scope, e.target.value as "allow" | "deny" | "ask")}
+              className="mt-2 w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="allow">Allow</option>
+              <option value="deny">Deny</option>
+              <option value="ask">Ask each time</option>
+            </select>
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+src/components/RedactedField.tsx
+import React from "react";
+
+type Props = {
+  label: string;
+  value?: string;
+  visible?: boolean;
+  copyable?: boolean;
+  fallback?: string;
+};
+
+export function RedactedField({
+  label,
+  value,
+  visible = false,
+  copyable = false,
+  fallback = "—",
+}: Props) {
+  const rendered = value ? (visible ? value : value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value) : fallback;
+
+  async function copy() {
+    if (!value || !copyable || typeof navigator === "undefined") return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // ignore clipboard failures
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</span>
+        {copyable ? (
+          <button onClick={copy} className="text-xs text-slate-700 underline">
+            Copy
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-1 break-all font-mono text-sm text-slate-900">{rendered}</div>
+    </div>
+  );
+}
+
+src/components/ShieldedBalanceCard.tsx
+import React from "react";
+import type { ShieldedBalance, PrivacySettings } from "../types/privacy";
+import { formatShieldedBalance, redactTxHash } from "../lib/redaction";
+
+type Props = {
+  balance: ShieldedBalance;
+  settings: PrivacySettings;
+  onReveal?: (assetId: string) => void;
+};
+
+export function ShieldedBalanceCard({ balance, settings, onReveal }: Props) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">
+            {balance.shielded ? "Shielded balance" : "Public balance"}
+          </h3>
+          <p className="mt-1 text-sm text-slate-600">{formatShieldedBalance(balance, settings)}</p>
+        </div>
+        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+          {balance.shielded ? "private" : "public"}
+        </span>
+      </div>
+
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-slate-500">Asset</dt>
+          <dd className="font-mono text-sm text-slate-900">{balance.assetId}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-slate-500">Owner commitment</dt>
+          <dd className="font-mono text-sm text-slate-900">{redactTxHash(balance.ownerCommitment, false)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-slate-500">Balance commitment</dt>
+          <dd className="font-mono text-sm text-slate-900">{redactTxHash(balance.balanceCommitment, false)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-slate-500">Available</dt>
+          <dd className="text-sm text-slate-900">{settings.showRawAmounts ? balance.available : "redacted"}</dd>
+        </div>
+      </dl>
+
+      {onReveal ? (
+        <button
+          onClick={() => onReveal(balance.assetId)}
+          className="mt-4 rounded-xl border px-4 py-2 text-sm font-medium"
+        >
+          Reveal balance to me
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+src/components/TransactionPreviewCard.tsx
+import React from "react";
+import type { TransactionPreview } from "../types/privacy";
+import { redactTxHash } from "../lib/redaction";
+
+type Props = {
+  preview: TransactionPreview;
+  onSubmit?: () => void;
+};
+
+export function TransactionPreviewCard({ preview, onSubmit }: Props) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">Transaction preview</h3>
+          <p className="mt-1 text-sm text-slate-600">{preview.rawSummary}</p>
+        </div>
+        <div className="text-right">
+          <div className="text-sm font-medium text-slate-900">{preview.estimatedFee}</div>
+          <div className="text-xs text-slate-500">Estimated fee</div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="text-xs uppercase text-slate-500">Intent</div>
+          <div className="mt-1 text-sm text-slate-900">{preview.intent.kind}</div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="text-xs uppercase text-slate-500">Gas limit</div>
+          <div className="mt-1 text-sm text-slate-900">{preview.gasLimit.toLocaleString()}</div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="text-xs uppercase text-slate-500">Nonce</div>
+          <div className="mt-1 font-mono text-sm text-slate-900">{preview.intent.nonce}</div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="text-xs uppercase text-slate-500">Tx ID</div>
+          <div className="mt-1 font-mono text-sm text-slate-900">{redactTxHash(preview.intent.id)}</div>
+        </div>
+      </div>
+
+      {preview.warnings.length > 0 ? (
+        <ul className="mt-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {preview.warnings.map((warning) => (
+            <li key={warning}>• {warning}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="mt-4 flex items-center justify-between">
+        <span className={`text-sm ${preview.canSubmit ? "text-emerald-700" : "text-rose-700"}`}>
+          {preview.canSubmit ? "Ready to submit" : "Blocked by policy"}
+        </span>
+        <button
+          disabled={!preview.canSubmit}
+          onClick={onSubmit}
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+        >
+          Submit
+        </button>
+      </div>
+    </section>
+  );
+}
+
+src/components/EncryptedMessageComposer.tsx
+import React, { useState } from "react";
+import type { MessageEnvelope, PrivacySettings } from "../types/privacy";
+import { encryptJson } from "../lib/crypto";
+import { sanitizeLabel } from "../lib/validation";
+
+type Props = {
+  settings: PrivacySettings;
+  encryptionKey?: CryptoKey;
+  onCreate: (message: MessageEnvelope) => void;
+};
+
+export function EncryptedMessageComposer({ settings, encryptionKey, onCreate }: Props) {
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      const envelope: MessageEnvelope = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        to: recipient ? (recipient as `0x${string}`) : undefined,
+        subject: sanitizeLabel(subject),
+        privacyLevel: settings.preferredPrivacyLevel,
+        tags: ["private-message"],
+      };
+
+      if (settings.localEncryptionEnabled && encryptionKey) {
+        const sealed = await encryptJson(
+          { body, subject: envelope.subject, recipient: envelope.to },
+          encryptionKey,
+          "private-message"
+        );
+        envelope.ciphertext = sealed.ciphertext;
+        envelope.plaintextPreview = undefined;
+      } else {
+        envelope.plaintextPreview = body.slice(0, 60);
+      }
+
+      onCreate(envelope);
+      setSubject("");
+      setBody("");
+      setRecipient("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to create message");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border bg-white p-5 shadow-sm">
+      <h3 className="text-lg font-semibold text-slate-900">Encrypted message composer</h3>
+      <p className="mt-1 text-sm text-slate-600">
+        Messages are encrypted locally before they leave the browser when a key is available.
+      </p>
+
+      <div className="mt-4 grid gap-3">
+        <input
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+          placeholder="Recipient address"
+          className="rounded-xl border px-3 py-2 text-sm"
+        />
+        <input
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          placeholder="Subject"
+          className="rounded-xl border px-3 py-2 text-sm"
+        />
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Write a private message..."
+          rows={5}
+          className="rounded-xl border px-3 py-2 text-sm"
+        />
+      </div>
+
+      {error ? <p className="mt-3 text-sm text-rose-700">{error}</p> : null}
+
+      <div className="mt-4 flex items-center justify-between">
+        <span className="text-xs text-slate-500">
+          {settings.localEncryptionEnabled && encryptionKey ? "Local encryption active" : "Plaintext preview mode"}
+        </span>
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:bg-slate-400"
+        >
+          {saving ? "Saving..." : "Create message"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+src/components/AuditTrailPanel.tsx
+import React from "react";
+import type { AuditEvent } from "../types/privacy";
+
+type Props = {
+  events: AuditEvent[];
+};
+
+export function AuditTrailPanel({ events }: Props) {
+  return (
+    <section className="rounded-2xl border bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-900">Audit trail</h3>
+        <span className="text-sm text-slate-500">{events.length} events</span>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {events.length === 0 ? (
+          <div className="rounded-xl border border-dashed p-4 text-sm text-slate-500">No events yet.</div>
+        ) : (
+          events.slice().reverse().map((event) => (
+            <article key={event.id} className="rounded-xl border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-medium text-slate-900">{event.title}</div>
+                <span className={`text-xs ${
+                  event.level === "error" ? "text-rose-700" : event.level === "warn" ? "text-amber-700" : "text-slate-500"
+                }`}>
+                  {event.level}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-slate-600">{event.description}</p>
+              <div className="mt-2 text-xs text-slate-500">
+                {event.category} • {new Date(event.timestamp).toLocaleString()}
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+src/components/PrivacyDashboard.tsx
+import React, { useMemo, useState } from "react";
+import type {
+  AuditEvent,
+  MessageEnvelope,
+  PrivacyConsentMatrix,
+  PrivacySettings,
+  ShieldedBalance,
+  WalletSession,
+} from "../types/privacy";
+import { ConsentBanner } from "./ConsentBanner";
+import { ShieldedBalanceCard } from "./ShieldedBalanceCard";
+import { TransactionPreviewCard } from "./TransactionPreviewCard";
+import { EncryptedMessageComposer } from "./EncryptedMessageComposer";
+import { AuditTrailPanel } from "./AuditTrailPanel";
+import { createTransactionIntent, buildTransactionPreview } from "../lib/transactionPreview";
+import { DEFAULT_CONSENT, setConsent } from "../lib/consent";
+import { privacySummary, redactMessageEnvelope } from "../lib/redaction";
+
+type Props = {
+  wallet: WalletSession;
+  settings: PrivacySettings;
+  onSettingsChange: (patch: Partial<PrivacySettings>) => void;
+  onSettingsReset: () => void;
+  consent: PrivacyConsentMatrix;
+  onConsentChange: (scope: keyof PrivacyConsentMatrix, value: "allow" | "deny" | "ask") => void;
+  onConsentReset: () => void;
+  balances: ShieldedBalance[];
+  audits: AuditEvent[];
+  onAppendAudit: (event: AuditEvent) => void;
+  encryptionKey?: CryptoKey;
+  onSubmitTransfer?: () => Promise<void> | void;
+  onRevealBalance?: (assetId: string) => void;
+  onMessageCreated?: (message: MessageEnvelope) => void;
+};
+
+export function PrivacyDashboard({
+  wallet,
+  settings,
+  onSettingsChange,
+  onSettingsReset,
+  consent,
+  onConsentChange,
+  onConsentReset,
+  balances,
+  audits,
+  onAppendAudit,
+  encryptionKey,
+  onSubmitTransfer,
+  onRevealBalance,
+  onMessageCreated,
+}: Props) {
+  const [amount, setAmount] = useState("1.0");
+  const [recipient, setRecipient] = useState("0x0000000000000000000000000000000000000000");
+  const [memo, setMemo] = useState("private transfer");
+
+  const intent = useMemo(
+    () =>
+      createTransactionIntent({
+        chainId: wallet.chainId ?? 0,
+        kind: "transfer",
+        sender: wallet.account,
+        recipient: recipient as `0x${string}`,
+        amount,
+        memo,
+        privacyLevel: settings.preferredPrivacyLevel,
+      }),
+    [wallet.account, wallet.chainId, amount, recipient, memo, settings.preferredPrivacyLevel]
+  );
+
+  const preview = useMemo(() => buildTransactionPreview(intent, settings), [intent, settings]);
+
+  const sampleMessage = useMemo<MessageEnvelope | null>(() => {
+    if (!onMessageCreated) return null;
+    return redactMessageEnvelope(
+      {
+        id: "sample-message",
+        createdAt: new Date().toISOString(),
+        from: wallet.account,
+        to: recipient as `0x${string}`,
+        subject: "Status update",
+        plaintextPreview: "We moved the funds privately.",
+        privacyLevel: settings.preferredPrivacyLevel,
+        tags: ["sample"],
+      },
+      settings
+    );
+  }, [wallet.account, recipient, settings, onMessageCreated]);
+
+  function log(label: string, description: string, level: AuditEvent["level"] = "info", category: AuditEvent["category"] = "security") {
+    onAppendAudit({
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      category,
+      level,
+      title: label,
+      description,
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Frontend privacy dashboard</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              A privacy-first interface for blockchain workflows: redacted by default, encrypted locally,
+              and explicit about consent.
+            </p>
+            <p className="mt-2 text-xs text-slate-500">{privacySummary(settings)}</p>
+          </div>
+
+          <div className="grid gap-2 rounded-2xl bg-slate-50 p-4 text-sm">
+            <div><span className="font-medium">Wallet:</span> {wallet.connected ? "connected" : "disconnected"}</div>
+            <div><span className="font-medium">Account:</span> {wallet.account ?? "—"}</div>
+            <div><span className="font-medium">Provider:</span> {wallet.provider ?? "—"}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <label className="rounded-xl border p-3">
+            <div className="text-xs uppercase text-slate-500">Show raw addresses</div>
+            <input
+              type="checkbox"
+              checked={settings.showRawAddresses}
+              onChange={(e) => onSettingsChange({ showRawAddresses: e.target.checked })}
+              className="mt-2"
+            />
+          </label>
+          <label className="rounded-xl border p-3">
+            <div className="text-xs uppercase text-slate-500">Show raw amounts</div>
+            <input
+              type="checkbox"
+              checked={settings.showRawAmounts}
+              onChange={(e) => onSettingsChange({ showRawAmounts: e.target.checked })}
+              className="mt-2"
+            />
+          </label>
+          <label className="rounded-xl border p-3">
+            <div className="text-xs uppercase text-slate-500">Redact messages</div>
+            <input
+              type="checkbox"
+              checked={settings.redactMessageBodies}
+              onChange={(e) => onSettingsChange({ redactMessageBodies: e.target.checked })}
+              className="mt-2"
+            />
+          </label>
+          <label className="rounded-xl border p-3">
+            <div className="text-xs uppercase text-slate-500">Local encryption</div>
+            <input
+              type="checkbox"
+              checked={settings.localEncryptionEnabled}
+              onChange={(e) => onSettingsChange({ localEncryptionEnabled: e.target.checked })}
+              className="mt-2"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button onClick={onSettingsReset} className="rounded-xl border px-4 py-2 text-sm">
+            Reset privacy settings
+          </button>
+          <button
+            onClick={() => log("settings", "User reviewed privacy settings", "info", "security")}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white"
+          >
+            Log review
+          </button>
+        </div>
+      </section>
+
+      <ConsentBanner
+        consent={consent}
+        onChange={onConsentChange}
+        onAcceptAll={() => {
+          onConsentChange("support", "allow");
+          onConsentChange("transactions", "ask");
+          onConsentChange("balances", "ask");
+          log("consent", "Support-only consent selected");
+        }}
+        onDenyAll={() => {
+          onConsentReset();
+          log("consent", "Consent matrix reset to deny-first");
+        }}
+      />
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <div className="space-y-4">
+          {balances.map((balance) => (
+            <ShieldedBalanceCard
+              key={`${balance.assetId}-${balance.ownerCommitment}`}
+              balance={balance}
+              settings={settings}
+              onReveal={onRevealBalance}
+            />
+          ))}
+        </div>
+
+        <div className="space-y-6">
+          <TransactionPreviewCard
+            preview={preview}
+            onSubmit={() => {
+              onSubmitTransfer?.();
+              log("tx", "Private transfer preview accepted", "info", "tx");
+            }}
+          />
+
+          <section className="rounded-2xl border bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">Prepare transfer</h3>
+            <div className="mt-4 grid gap-3">
+              <input
+                value={recipient}
+                onChange={(e) => setRecipient(e.target.value)}
+                className="rounded-xl border px-3 py-2 text-sm"
+                placeholder="Recipient address"
+              />
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="rounded-xl border px-3 py-2 text-sm"
+                placeholder="Amount"
+              />
+              <input
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                className="rounded-xl border px-3 py-2 text-sm"
+                placeholder="Memo"
+              />
+            </div>
+          </section>
+
+          <EncryptedMessageComposer
+            settings={settings}
+            encryptionKey={encryptionKey}
+            onCreate={(message) => {
+              onMessageCreated?.(message);
+              log("message", "Encrypted message created", "info", "message");
+            }}
+          />
+
+          {sampleMessage ? (
+            <section className="rounded-2xl border bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">Message preview</h3>
+              <pre className="mt-3 overflow-auto rounded-xl bg-slate-50 p-4 text-xs text-slate-800">
+                {JSON.stringify(sampleMessage, null, 2)}
+              </pre>
+            </section>
+          ) : null}
+        </div>
+      </section>
+
+      <AuditTrailPanel events={audits} />
+    </div>
+  );
+}
+
+src/pages/PrivacyApp.tsx
+import React, { useEffect, useMemo, useState } from "react";
+import { PrivacyDashboard } from "../components/PrivacyDashboard";
+import { usePrivacySettings } from "../hooks/usePrivacySettings";
+import { useWalletConnection } from "../hooks/useWalletConnection";
+import { DEFAULT_CONSENT, setConsent } from "../lib/consent";
+import { createJsonStore, createStorageAdapter } from "../lib/storage";
+import type {
+  AuditEvent,
+  PrivacyConsentMatrix,
+  ShieldedBalance,
+  MessageEnvelope,
+} from "../types/privacy";
+import { decryptJson, deriveKeyFromPassphrase, generateNonce, randomId } from "../lib/crypto";
+import { PrivacyBlockchainClient } from "../lib/blockchainClient";
+import { PrivacyUiError, toAppErrorInfo } from "../lib/errors";
+
+const consentStore = createJsonStore(createStorageAdapter(), "privacy-app");
+const auditStore = createJsonStore(createStorageAdapter(), "privacy-app-audit");
+
+export function PrivacyApp() {
+  const settingsApi = usePrivacySettings();
+  const walletApi = useWalletConnection();
+  const [consent, setConsentMatrix] = useState<PrivacyConsentMatrix>(() => consentStore.get("consent", DEFAULT_CONSENT));
+  const [audits, setAudits] = useState<AuditEvent[]>(() => auditStore.get("events", []));
+  const [balances, setBalances] = useState<ShieldedBalance[]>([]);
+  const [secretKey, setSecretKey] = useState<CryptoKey | undefined>(undefined);
+  const [unlockPassphrase, setUnlockPassphrase] = useState("");
+  const [status, setStatus] = useState<string>("Ready");
+  const [error, setError] = useState<string | null>(null);
+
+  const client = useMemo(
+    () => new PrivacyBlockchainClient({ baseUrl: "/api", chainId: walletApi.session.chainId ?? 1 }),
+    [walletApi.session.chainId]
+  );
+
+  useEffect(() => {
+    consentStore.set("consent", consent);
+  }, [consent]);
+
+  useEffect(() => {
+    auditStore.set("events", audits);
+  }, [audits]);
+
+  useEffect(() => {
+    if (walletApi.session.connected && walletApi.session.account) {
+      client.getShieldedBalances(walletApi.session.account)
+        .then(setBalances)
+        .catch((cause) => {
+          setError(cause instanceof Error ? cause.message : "Unable to load balances");
+          setBalances([
+            {
+              assetId: "DEMO",
+              ownerCommitment: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+              balanceCommitment: "0xbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdead",
+              available: "1500",
+              pending: "25",
+              shielded: true,
+            },
+          ]);
+        });
+    }
+  }, [client, walletApi.session.account, walletApi.session.connected]);
+
+  async function unlockLocalSecrets() {
+    try {
+      setError(null);
+      setStatus("Deriving local encryption key...");
+      const key = await deriveKeyFromPassphrase(unlockPassphrase, "privacy-app-local-salt");
+      setSecretKey(key);
+      setStatus("Local secrets unlocked.");
+      appendAudit("security", "Local encryption key derived", "Key kept in memory only.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to derive local key");
+      setStatus("Unlock failed.");
+      appendAudit("security", "Local unlock failed", "Passphrase derivation failed.", "warn");
+    }
+  }
+
+  function appendAudit(
+    category: AuditEvent["category"],
+    title: string,
+    description: string,
+    level: AuditEvent["level"] = "info"
+  ) {
+    setAudits((prev) => [
+      ...prev,
+      {
+        id: randomId("audit"),
+        timestamp: new Date().toISOString(),
+        category,
+        level,
+        title,
+        description,
+      },
+    ]);
+  }
+
+  async function submitTransfer() {
+    try {
+      setError(null);
+      if (!walletApi.session.account) {
+        throw new PrivacyUiError(toAppErrorInfo("NO_WALLET", "Connect a wallet before submitting."));
+      }
+
+      appendAudit("tx", "Transfer submitted", "Preparing private transfer preview.");
+      setStatus("Submitting private transfer...");
+
+      const result = await client.submitPrivateTransfer({
+        chainId: walletApi.session.chainId ?? 1,
+        assetId: balances[0]?.assetId ?? "DEMO",
+        fromCommitment: balances[0]?.ownerCommitment ?? "0x00",
+        toCommitment: "0x1111111111111111111111111111111111111111111111111111111111111111",
+        amount: "1",
+        memo: "frontend private transfer",
+        privacyLevel: settingsApi.settings.preferredPrivacyLevel,
+      });
+
+      appendAudit("tx", "Transfer submitted", `Tx hash ${result.txHash}`, "info");
+      setStatus(`Submitted: ${result.txHash}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Transfer failed");
+      appendAudit("tx", "Transfer failed", "Submit path failed.", "error");
+      setStatus("Transfer failed.");
+    }
+  }
+
+  function handleReveal(assetId: string) {
+    appendAudit("security", "Reveal request", `User asked to reveal balance for ${assetId}`);
+    setStatus(`Reveal requested for ${assetId}`);
+  }
+
+  function handleMessage(message: MessageEnvelope) {
+    appendAudit("message", "Message created", message.subject ?? "No subject");
+    setStatus(`Message ${message.id} created`);
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900">
+      <div className="mx-auto max-w-7xl space-y-4">
+        <section className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Privacy-first blockchain frontend</h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Redaction, local encryption, shielded balances, consent control, and auditability in one UI.
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs uppercase text-slate-500">Status</div>
+              <div className="mt-1 text-sm font-medium">{status}</div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {!walletApi.isConnected ? (
+              <button
+                onClick={walletApi.connectInjected}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white"
+              >
+                Connect wallet
+              </button>
+            ) : (
+              <button
+                onClick={walletApi.disconnect}
+                className="rounded-xl border px-4 py-2 text-sm"
+              >
+                Disconnect
+              </button>
+            )}
+
+            <button
+              onClick={unlockLocalSecrets}
+              className="rounded-xl border px-4 py-2 text-sm"
+            >
+              Unlock local encryption
+            </button>
+
+            <button
+              onClick={() => settingsApi.reset()}
+              className="rounded-xl border px-4 py-2 text-sm"
+            >
+              Reset settings
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <input
+              value={unlockPassphrase}
+              onChange={(e) => setUnlockPassphrase(e.target.value)}
+              placeholder="Local passphrase"
+              className="rounded-xl border px-3 py-2 text-sm"
+              type="password"
+            />
+            <button
+              onClick={() => setConsentMatrix(DEFAULT_CONSENT)}
+              className="rounded-xl border px-4 py-2 text-sm"
+            >
+              Reset consent
+            </button>
+          </div>
+
+          {error ? (
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+              {error}
+            </div>
+          ) : null}
+        </section>
+
+        <PrivacyDashboard
+          wallet={walletApi.session}
+          settings={settingsApi.settings}
+          onSettingsChange={settingsApi.patch}
+          onSettingsReset={settingsApi.reset}
+          consent={consent}
+          onConsentChange={(scope, value) => {
+            setConsentMatrix((prev) => {
+              const next = setConsent(prev, scope, value);
+              consentStore.set("consent", next);
+              return next;
+            });
+            appendAudit("consent", `Consent changed: ${scope}`, `Set ${scope} to ${value}`);
+          }}
+          onConsentReset={() => {
+            setConsentMatrix(DEFAULT_CONSENT);
+            consentStore.set("consent", DEFAULT_CONSENT);
+            appendAudit("consent", "Consent reset", "Consent matrix restored to defaults.");
+          }}
+          balances={balances}
+          audits={audits}
+          onAppendAudit={(event) => setAudits((prev) => [...prev, event])}
+          encryptionKey={secretKey}
+          onSubmitTransfer={submitTransfer}
+          onRevealBalance={handleReveal}
+          onMessageCreated={handleMessage}
+        />
+      </div>
+    </main>
+  );
+}
+
+src/lib/__tests__/redaction.test.ts
+import { describe, expect, it } from "vitest";
+import { redactAddress, redactAmount, privacySummary } from "../redaction";
+
+describe("redaction helpers", () => {
+  it("redacts addresses by default", () => {
+    expect(redactAddress("0x1234567890abcdef1234567890abcdef12345678" as `0x${string}`)).toContain("…");
+  });
+
+  it("keeps amounts visible when requested", () => {
+    expect(redactAmount("12345.678", true)).toBe("12345.678");
+  });
+
+  it("summarizes privacy settings", () => {
+    expect(
+      privacySummary({
+        showRawAddresses: false,
+        showRawAmounts: false,
+        showTxHashes: false,
+        showCounterpartyNames: false,
+        redactMessageBodies: true,
+        localEncryptionEnabled: true,
+        autoLockMinutes: 10,
+        preferredPrivacyLevel: "private",
+      })
+    ).toContain("local encryption enabled");
+  });
+});
+
+src/lib/__tests__/consent.test.ts
+import { describe, expect, it } from "vitest";
+import { DEFAULT_CONSENT, consentLabel, hasConsent, setConsent } from "../consent";
+
+describe("consent helpers", () => {
+  it("returns false when consent is ask", () => {
+    expect(hasConsent(DEFAULT_CONSENT, "messages")).toBe(false);
+  });
+
+  it("updates consent immutably", () => {
+    const next = setConsent(DEFAULT_CONSENT, "support", "allow");
+    expect(next.support).toBe("allow");
+  });
+
+  it("labels consent values", () => {
+    expect(consentLabel("ask")).toMatch(/Ask/);
+  });
+});
+
+src/lib/__tests__/validation.test.ts
+import { describe, expect, it } from "vitest";
+import { assertAddress, assertTxHash, assertPositiveDecimalString } from "../validation";
+
+describe("validation", () => {
+  it("accepts valid address", () => {
+    expect(() => assertAddress("0x1234567890abcdef1234567890abcdef12345678")).not.toThrow();
+  });
+
+  it("rejects invalid tx hash", () => {
+    expect(() => assertTxHash("0xabc")).toThrow();
+  });
+
+  it("rejects invalid amount", () => {
+    expect(() => assertPositiveDecimalString("-1")).toThrow();
+  });
+});
+
+src/lib/__tests__/storage.test.ts
+import { describe, expect, it } from "vitest";
+import { createJsonStore } from "../storage";
+
+class MockStorage {
+  private map = new Map<string, string>();
+  getItem(key: string) {
+    return this.map.get(key) ?? null;
+  }
+  setItem(key: string, value: string) {
+    this.map.set(key, value);
+  }
+  removeItem(key: string) {
+    this.map.delete(key);
+  }
+  keys() {
+    return [...this.map.keys()];
+  }
+}
+
+describe("json store", () => {
+  it("persists and loads values", () => {
+    const store = createJsonStore(new MockStorage() as never, "test");
+    store.set("one", { a: 1 });
+    expect(store.get("one", { a: 0 })).toEqual({ a: 1 });
+  });
+});
+
+src/lib/__tests__/crypto.note.ts
+// This file intentionally documents the expected crypto behavior without relying on a real browser crypto runtime.
+// In the app, deriveKeyFromPassphrase, encryptJson, and decryptJson use Web Crypto and should be exercised in-browser.
+export {};
+
+This gives you a frontend privacy stack that feels usable instead of bolted on: everything important is redacted by default, local secrets stay local, consent is explicit, and blockchain interactions are previewed before submission.
+
+

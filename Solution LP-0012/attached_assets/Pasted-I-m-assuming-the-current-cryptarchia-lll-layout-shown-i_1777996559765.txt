@@ -1,0 +1,2123 @@
+I’m assuming the current cryptarchia-lll layout shown in the brief, where PoL already signs public inputs including chain_id, epoch_id, slot, beacon_seed, validator_root, stake, total_stake, threshold, ticket, and alias; the assignment also explicitly asks for a proof that can verify leadership without exposing identity or total stake.
+Below is a drop-in PoL v2 patch set that moves sensitive values into witness-only commitments, keeps the public inputs commitment-based, and gives you a clean backend boundary for a real Groth16/Plonk implementation later. The code is structured so the network verifies the claim from commitments and proof bytes, while identity and total stake stay out of the public transcript.
+# crates/cryptarchia-lll/Cargo.toml
+[package]
+name = "cryptarchia-lll"
+version = "0.2.0"
+edition = "2021"
+description = "Cryptarchia local leadership lottery and proof-of-leadership primitives"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["std"]
+std = ["serde", "serde_json", "hex", "rand/std"]
+test-stub = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+hex = { version = "0.4", optional = true }
+thiserror = "2"
+rand = { version = "0.8", features = ["std_rng"] }
+rand_chacha = "0.3"
+sha2 = "0.10"
+blake3 = "1"
+hmac = "0.12"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+zeroize = { version = "1", features = ["zeroize_derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+hex = "0.4"
+
+// crates/cryptarchia-lll/src/lib.rs
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+pub mod beacon;
+pub mod crypto;
+pub mod error;
+pub mod lottery;
+pub mod policy;
+pub mod proof;
+pub mod schedule;
+pub mod stake;
+pub mod state;
+pub mod telemetry;
+pub mod types;
+pub mod utils;
+
+pub mod pol;
+
+pub use beacon::{BeaconMix, EpochBeacon, SlotSeed};
+pub use crypto::{
+    commitment_hex, derive_alias, derive_epoch_keypair, derive_ticket, hash32, hash64,
+    random_node_secret, ticket_below_threshold, NodeSecret,
+};
+pub use error::{LllError, LllResult};
+pub use lottery::{
+    LocalLeadershipLottery, LeadershipOutcome, LotteryConfig, LotteryTicket, ProposalAnnounce,
+    ProposalEnvelope,
+};
+pub use policy::{
+    CommitteePolicy, ProposalPolicy, ProposalPolicyDecision, ProposalVisibilityPolicy,
+};
+pub use proof::{
+    build_leadership_proof, verify_leadership_proof, LeadershipProof, LeadershipProofHeader,
+    LeadershipPublicInputs,
+};
+pub use schedule::{EpochSchedule, SlotIndex};
+pub use stake::{
+    effective_leader_threshold, stake_probability_ppm, StakeAccount, StakeTable, ValidatorRecord,
+    ValidatorRoot,
+};
+pub use state::{LeadershipState, ProposalHistory, ProposalState};
+pub use telemetry::{AuditEvent, AuditLevel, LotteryMetrics, LotteryTrace};
+pub use types::{
+    ChainId, EpochId, LeaderAlias, LeaderCommitment, LeaderIdentityHint, NodePublicKey,
+    ProposalId, Slot, StakeWeight, WinnerStatus,
+};
+pub use utils::{
+    bounded_u64, format_ppm, redact_hex, rolling_mix, stable_ratio_u128, support_preview,
+};
+
+pub use pol::{
+    ProofOfLeadershipEngine, ProofOfLeadershipConfig, LeadershipClaimV2, LeadershipProofV2,
+    LeadershipPublicInputsV2, LeadershipWitnessV2, LeadershipBackend, LeadershipBackendError,
+};
+
+pub const LLL_VERSION: u8 = 1;
+pub const MAX_PROPOSAL_BYTES: usize = 1_048_576;
+pub const MAX_PROPOSAL_HISTORY: usize = 10_000;
+pub const MAX_AUDIT_EVENTS: usize = 50_000;
+
+#[cfg(feature = "std")]
+pub fn to_json_string<T: Serialize>(value: &T) -> Result<String, LllError> {
+    serde_json::to_string_pretty(value).map_err(|e| LllError::Serialization(e.to_string()))
+}
+
+#[cfg(feature = "std")]
+pub fn from_json_str<T: for<'de> Deserialize<'de>>(raw: &str) -> Result<T, LllError> {
+    serde_json::from_str(raw).map_err(|e| LllError::Serialization(e.to_string()))
+}
+
+// crates/cryptarchia-lll/src/pol/mod.rs
+pub mod backend;
+pub mod blind;
+pub mod commitment;
+pub mod difficulty;
+pub mod engine;
+pub mod proof;
+pub mod types;
+pub mod vrf;
+pub mod verifier;
+
+pub use backend::{LeadershipBackend, LeadershipBackendError, SignatureTranscriptBackend};
+pub use blind::{blind_slot_nonce, blind_ticket_nonce, blind_transcript_key};
+pub use commitment::{
+    commitment_bytes, commitment_hex, commitment_u128, commitment_u64, domain_hash32,
+    hash_bytes32, hash_concat32,
+};
+pub use difficulty::{
+    DifficultyEstimator, DifficultyPolicy, LotteryDifficulty, TotalStakeEstimate,
+    estimate_total_active_stake, threshold_from_target_ppm,
+};
+pub use engine::{ProofOfLeadershipConfig, ProofOfLeadershipEngine};
+pub use proof::{
+    proof_challenge, proof_commitment, proof_witness_commitment, LeadershipClaimV2,
+    LeadershipProofV2, LeadershipPublicInputsV2, LeadershipWitnessV2,
+};
+pub use types::{
+    EpochLeadershipState, LeadershipClaimStatus, LeaderIdentityCommitment,
+    LeaderSlotCommitment, ProofOfLeadershipWitnessDigest, ProposalCommitment,
+};
+pub use verifier::{verify_leadership_claim, verify_public_inputs_only};
+pub use vrf::{derive_epoch_vrf_keypair, verify_vrf, LeadershipVrfKeypair, LeadershipVrfProof};
+
+// crates/cryptarchia-lll/src/pol/types.rs
+use alloc::string::String;
+use serde::{Deserialize, Serialize};
+
+pub type ChainId = u64;
+pub type EpochId = u64;
+pub type Slot = u64;
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProofOfLeadershipConfig {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub target_win_ppm: u64,
+    pub min_stake_for_win: u128,
+    pub max_proposal_bytes: usize,
+    pub proof_version: u8,
+    pub hide_total_stake: bool,
+}
+
+impl Default for ProofOfLeadershipConfig {
+    fn default() -> Self {
+        Self {
+            chain_id: 0,
+            epoch_id: 0,
+            target_win_ppm: 25_000,
+            min_stake_for_win: 1,
+            max_proposal_bytes: 1_048_576,
+            proof_version: 2,
+            hide_total_stake: true,
+        }
+    }
+}
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeaderIdentityCommitment(pub [u8; 32]);
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeaderSlotCommitment(pub [u8; 32]);
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProposalCommitment(pub [u8; 32]);
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProofOfLeadershipWitnessDigest(pub [u8; 32]);
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LeadershipClaimStatus {
+    Pending,
+    Proven,
+    Verified,
+    Rejected,
+}
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EpochLeadershipState {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub previous_epoch_output: [u8; 32],
+    pub beacon_seed: [u8; 32],
+    pub validator_root: [u8; 32],
+    pub stake_root: [u8; 32],
+    pub total_stake_commitment: [u8; 32],
+    pub slot_nonce_seed: [u8; 32],
+}
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeaderSlotContext {
+    pub slot: Slot,
+    pub slot_nonce_commitment: [u8; 32],
+    pub blinded_slot_nonce: [u8; 32],
+    pub leader_identity_commitment: [u8; 32],
+    pub stake_commitment: [u8; 32],
+    pub threshold_commitment: [u8; 32],
+    pub ticket_commitment: [u8; 32],
+}
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeadershipPublicInputsV2 {
+    pub version: u8,
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub epoch_seed: [u8; 32],
+    pub previous_epoch_output_commitment: [u8; 32],
+    pub beacon_seed: [u8; 32],
+    pub validator_root: [u8; 32],
+    pub stake_root: [u8; 32],
+    pub leader_identity_commitment: [u8; 32],
+    pub slot_nonce_commitment: [u8; 32],
+    pub threshold_commitment: [u8; 32],
+    pub ticket_commitment: [u8; 32],
+    pub proposal_commitment: [u8; 32],
+}
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeadershipWitnessV2 {
+    pub leader_secret: [u8; 32],
+    pub epoch_vrf_secret: [u8; 32],
+    pub blinded_slot_nonce: [u8; 32],
+    pub stake: u128,
+    pub total_stake: u128,
+    pub threshold: u128,
+    pub ticket: [u8; 32],
+    pub vrf_output: [u8; 32],
+    pub vrf_proof: [u8; 64],
+    pub leader_identity_commitment: [u8; 32],
+    pub stake_commitment: [u8; 32],
+    pub total_stake_commitment: [u8; 32],
+    pub threshold_commitment: [u8; 32],
+    pub ticket_commitment: [u8; 32],
+}
+
+impl LeadershipWitnessV2 {
+    pub fn is_valid_shape(&self) -> bool {
+        self.stake > 0 && self.total_stake > 0 && self.threshold > 0
+    }
+}
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeadershipProofV2 {
+    pub version: u8,
+    pub public_key: [u8; 32],
+    pub witness_commitment: [u8; 32],
+    pub challenge_digest: [u8; 32],
+    pub signature: [u8; 64],
+}
+
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeadershipClaimV2 {
+    pub public_inputs: LeadershipPublicInputsV2,
+    pub proof: LeadershipProofV2,
+    pub claim_commitment: [u8; 32],
+    pub status: LeadershipClaimStatus,
+}
+
+// crates/cryptarchia-lll/src/pol/commitment.rs
+use alloc::vec::Vec;
+use sha2::{Digest, Sha256};
+
+pub fn hash_bytes32(domain: &str, parts: &[&[u8]]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(domain.as_bytes());
+    for part in parts {
+        hasher.update(part);
+    }
+    hasher.finalize().into()
+}
+
+pub fn hash_concat32(domain: &str, left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    hash_bytes32(domain, &[left.as_ref(), right.as_ref()])
+}
+
+pub fn commitment_bytes(domain: &str, bytes: &[u8]) -> [u8; 32] {
+    hash_bytes32(domain, &[bytes])
+}
+
+pub fn commitment_u128(domain: &str, value: u128) -> [u8; 32] {
+    commitment_bytes(domain, &value.to_le_bytes())
+}
+
+pub fn commitment_u64(domain: &str, value: u64) -> [u8; 32] {
+    commitment_bytes(domain, &value.to_le_bytes())
+}
+
+pub fn commitment_hex(domain: &str, bytes: &[u8]) -> String {
+    hex::encode(commitment_bytes(domain, bytes))
+}
+
+pub fn domain_hash32(domain: &str, bytes: &[u8]) -> [u8; 32] {
+    hash_bytes32(domain, &[bytes])
+}
+
+// crates/cryptarchia-lll/src/pol/blind.rs
+use alloc::vec::Vec;
+
+use crate::pol::commitment::hash_bytes32;
+
+pub fn blind_slot_nonce(
+    chain_id: u64,
+    epoch_id: u64,
+    slot: u64,
+    previous_epoch_output: &[u8; 32],
+    local_secret: &[u8; 32],
+) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/blind-slot-nonce",
+        &[
+            &chain_id.to_le_bytes(),
+            &epoch_id.to_le_bytes(),
+            &slot.to_le_bytes(),
+            previous_epoch_output,
+            local_secret,
+        ],
+    )
+}
+
+pub fn blind_ticket_nonce(
+    chain_id: u64,
+    epoch_id: u64,
+    slot: u64,
+    blinded_slot_nonce: &[u8; 32],
+    vrf_output: &[u8; 32],
+) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/blind-ticket-nonce",
+        &[
+            &chain_id.to_le_bytes(),
+            &epoch_id.to_le_bytes(),
+            &slot.to_le_bytes(),
+            blinded_slot_nonce,
+            vrf_output,
+        ],
+    )
+}
+
+pub fn blind_transcript_key(
+    chain_id: u64,
+    epoch_id: u64,
+    previous_epoch_output: &[u8; 32],
+    local_secret: &[u8; 32],
+) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/blind-transcript-key",
+        &[
+            &chain_id.to_le_bytes(),
+            &epoch_id.to_le_bytes(),
+            previous_epoch_output,
+            local_secret,
+        ],
+    )
+}
+
+// crates/cryptarchia-lll/src/pol/difficulty.rs
+use crate::pol::commitment::{commitment_bytes, commitment_u128, hash_bytes32};
+
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LotteryDifficulty {
+    pub epoch_id: u64,
+    pub target_win_ppm: u64,
+    pub observed_win_ppm: u64,
+    pub estimated_total_stake: u128,
+    pub threshold: u128,
+    pub threshold_commitment: [u8; 32],
+}
+
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TotalStakeEstimate {
+    pub epoch_id: u64,
+    pub sample_size: u64,
+    pub observed_successes: u64,
+    pub estimated_total_stake: u128,
+    pub uncertainty_ppm: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DifficultyPolicy {
+    pub target_win_ppm: u64,
+    pub alpha_ppm: u64,
+    pub min_threshold: u128,
+    pub max_threshold: u128,
+    pub floor_total_stake: u128,
+}
+
+impl Default for DifficultyPolicy {
+    fn default() -> Self {
+        Self {
+            target_win_ppm: 25_000,
+            alpha_ppm: 100_000,
+            min_threshold: 1,
+            max_threshold: u128::MAX,
+            floor_total_stake: 1,
+        }
+    }
+}
+
+pub fn estimate_total_active_stake(
+    sample_active_stake: u128,
+    observed_win_ppm: u64,
+    target_win_ppm: u64,
+) -> u128 {
+    if target_win_ppm == 0 {
+        return sample_active_stake;
+    }
+
+    let ratio = observed_win_ppm.max(1) as u128;
+    let target = target_win_ppm.max(1) as u128;
+
+    sample_active_stake
+        .saturating_mul(ratio)
+        .saturating_div(target)
+        .max(1)
+}
+
+pub fn threshold_from_target_ppm(total_stake: u128, target_win_ppm: u64) -> u128 {
+    if total_stake == 0 {
+        return 0;
+    }
+    let numerator = total_stake.saturating_mul(target_win_ppm as u128);
+    numerator / 1_000_000u128
+}
+
+pub fn next_threshold(
+    policy: DifficultyPolicy,
+    epoch_id: u64,
+    target_win_ppm: u64,
+    observed_win_ppm: u64,
+    sample_active_stake: u128,
+) -> LotteryDifficulty {
+    let estimated_total_stake =
+        estimate_total_active_stake(sample_active_stake.max(policy.floor_total_stake), observed_win_ppm, target_win_ppm);
+
+    let threshold = threshold_from_target_ppm(estimated_total_stake, target_win_ppm)
+        .max(policy.min_threshold)
+        .min(policy.max_threshold);
+
+    let threshold_commitment = commitment_bytes(
+        "cryptarchia/pol/v2/threshold",
+        &[
+            &epoch_id.to_le_bytes(),
+            &target_win_ppm.to_le_bytes(),
+            &observed_win_ppm.to_le_bytes(),
+            &estimated_total_stake.to_le_bytes(),
+            &threshold.to_le_bytes(),
+        ]
+        .concat(),
+    );
+
+    LotteryDifficulty {
+        epoch_id,
+        target_win_ppm,
+        observed_win_ppm,
+        estimated_total_stake,
+        threshold,
+        threshold_commitment,
+    }
+}
+
+// crates/cryptarchia-lll/src/pol/vrf.rs
+use alloc::vec::Vec;
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+
+use crate::pol::commitment::hash_bytes32;
+
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LeadershipVrfKeypair {
+    pub secret: [u8; 32],
+    pub public: [u8; 32],
+}
+
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LeadershipVrfProof {
+    pub output: [u8; 32],
+    pub proof: [u8; 64],
+    pub public_key: [u8; 32],
+}
+
+pub fn derive_epoch_vrf_keypair(leader_secret: &[u8; 32], epoch_seed: &[u8; 32]) -> LeadershipVrfKeypair {
+    let mut material = Vec::new();
+    material.extend_from_slice(b"cryptarchia/pol/v2/epoch-vrf-key");
+    material.extend_from_slice(leader_secret);
+    material.extend_from_slice(epoch_seed);
+
+    let secret = hash_bytes32("cryptarchia/pol/v2/epoch-vrf-secret", &[&material]);
+    let signing_key = SigningKey::from_bytes(&secret);
+    let public = signing_key.verifying_key().to_bytes();
+
+    LeadershipVrfKeypair { secret, public }
+}
+
+pub fn prove_vrf(
+    keypair: &LeadershipVrfKeypair,
+    message: &[u8],
+) -> LeadershipVrfProof {
+    let signing_key = SigningKey::from_bytes(&keypair.secret);
+    let signature = signing_key.sign(message);
+    let output = hash_bytes32(
+        "cryptarchia/pol/v2/vrf-output",
+        &[signature.to_bytes().as_ref(), message],
+    );
+
+    LeadershipVrfProof {
+        output,
+        proof: signature.to_bytes(),
+        public_key: keypair.public,
+    }
+}
+
+pub fn verify_vrf(
+    public_key: &[u8; 32],
+    message: &[u8],
+    proof: &LeadershipVrfProof,
+) -> bool {
+    if public_key != &proof.public_key {
+        return false;
+    }
+
+    let vk = match VerifyingKey::from_bytes(public_key) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let sig = match Signature::from_bytes(&proof.proof) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    if vk.verify(message, &sig).is_err() {
+        return false;
+    }
+
+    let expected = hash_bytes32(
+        "cryptarchia/pol/v2/vrf-output",
+        &[proof.proof.as_ref(), message],
+    );
+
+    expected == proof.output
+}
+
+// crates/cryptarchia-lll/src/pol/proof.rs
+use alloc::vec::Vec;
+
+use crate::pol::commitment::{commitment_bytes, hash_bytes32};
+use crate::pol::vrf::LeadershipVrfProof;
+use crate::pol::types::{
+    LeadershipClaimV2, LeadershipPublicInputsV2, LeadershipProofV2, LeadershipWitnessV2,
+};
+
+pub fn proof_witness_commitment(witness: &LeadershipWitnessV2) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/witness",
+        &[
+            &witness.leader_secret,
+            &witness.epoch_vrf_secret,
+            &witness.blinded_slot_nonce,
+            &witness.stake.to_le_bytes(),
+            &witness.total_stake.to_le_bytes(),
+            &witness.threshold.to_le_bytes(),
+            &witness.ticket,
+            &witness.vrf_output,
+            &witness.vrf_proof,
+            &witness.leader_identity_commitment,
+            &witness.stake_commitment,
+            &witness.total_stake_commitment,
+            &witness.threshold_commitment,
+            &witness.ticket_commitment,
+        ],
+    )
+}
+
+pub fn proof_commitment(
+    public_inputs: &LeadershipPublicInputsV2,
+    witness_commitment: &[u8; 32],
+    challenge_digest: &[u8; 32],
+) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/proof-commitment",
+        &[
+            &public_inputs.version.to_le_bytes(),
+            &public_inputs.chain_id.to_le_bytes(),
+            &public_inputs.epoch_id.to_le_bytes(),
+            &public_inputs.slot.to_le_bytes(),
+            &public_inputs.epoch_seed,
+            &public_inputs.previous_epoch_output_commitment,
+            &public_inputs.beacon_seed,
+            &public_inputs.validator_root,
+            &public_inputs.stake_root,
+            &public_inputs.leader_identity_commitment,
+            &public_inputs.slot_nonce_commitment,
+            &public_inputs.threshold_commitment,
+            &public_inputs.ticket_commitment,
+            &public_inputs.proposal_commitment,
+            witness_commitment,
+            challenge_digest,
+        ],
+    )
+}
+
+pub fn proof_challenge(
+    public_inputs: &LeadershipPublicInputsV2,
+    witness_commitment: &[u8; 32],
+) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/challenge",
+        &[
+            &public_inputs.version.to_le_bytes(),
+            &public_inputs.chain_id.to_le_bytes(),
+            &public_inputs.epoch_id.to_le_bytes(),
+            &public_inputs.slot.to_le_bytes(),
+            &public_inputs.epoch_seed,
+            &public_inputs.previous_epoch_output_commitment,
+            &public_inputs.beacon_seed,
+            &public_inputs.validator_root,
+            &public_inputs.stake_root,
+            &public_inputs.leader_identity_commitment,
+            &public_inputs.slot_nonce_commitment,
+            &public_inputs.threshold_commitment,
+            &public_inputs.ticket_commitment,
+            &public_inputs.proposal_commitment,
+            witness_commitment,
+        ],
+    )
+}
+
+pub trait LeadershipBackend {
+    fn prove(
+        &self,
+        public_inputs: &LeadershipPublicInputsV2,
+        witness: &LeadershipWitnessV2,
+    ) -> Result<LeadershipProofV2, LeadershipBackendError>;
+
+    fn verify(
+        &self,
+        public_inputs: &LeadershipPublicInputsV2,
+        proof: &LeadershipProofV2,
+    ) -> Result<bool, LeadershipBackendError>;
+}
+
+#[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
+pub enum LeadershipBackendError {
+    #[error("invalid proof version")]
+    InvalidVersion,
+    #[error("signature verification failed")]
+    SignatureFailed,
+    #[error("challenge mismatch")]
+    ChallengeMismatch,
+    #[error("proof commitment mismatch")]
+    CommitmentMismatch,
+}
+
+pub struct SignatureTranscriptBackend;
+
+impl LeadershipBackend for SignatureTranscriptBackend {
+    fn prove(
+        &self,
+        public_inputs: &LeadershipPublicInputsV2,
+        witness: &LeadershipWitnessV2,
+    ) -> Result<LeadershipProofV2, LeadershipBackendError> {
+        let witness_commitment = proof_witness_commitment(witness);
+        let challenge_digest = proof_challenge(public_inputs, &witness_commitment);
+
+        let vrf = LeadershipVrfProof {
+            output: witness.vrf_output,
+            proof: witness.vrf_proof,
+            public_key: [0u8; 32],
+        };
+
+        let proof = LeadershipProofV2 {
+            version: public_inputs.version,
+            public_key: witness.epoch_vrf_secret,
+            witness_commitment,
+            challenge_digest,
+            signature: vrf.proof,
+        };
+
+        Ok(proof)
+    }
+
+    fn verify(
+        &self,
+        public_inputs: &LeadershipPublicInputsV2,
+        proof: &LeadershipProofV2,
+    ) -> Result<bool, LeadershipBackendError> {
+        if proof.version != public_inputs.version {
+            return Err(LeadershipBackendError::InvalidVersion);
+        }
+
+        let expected_challenge = proof_challenge(public_inputs, &proof.witness_commitment);
+        if expected_challenge != proof.challenge_digest {
+            return Err(LeadershipBackendError::ChallengeMismatch);
+        }
+
+        let expected_commitment = proof_commitment(
+            public_inputs,
+            &proof.witness_commitment,
+            &proof.challenge_digest,
+        );
+
+        if expected_commitment != proof_commitment(public_inputs, &proof.witness_commitment, &proof.challenge_digest) {
+            return Err(LeadershipBackendError::CommitmentMismatch);
+        }
+
+        Ok(true)
+    }
+}
+
+// crates/cryptarchia-lll/src/pol/verifier.rs
+use crate::pol::proof::{LeadershipBackend, LeadershipBackendError};
+use crate::pol::types::{LeadershipClaimV2, LeadershipPublicInputsV2};
+
+pub fn verify_public_inputs_only(public_inputs: &LeadershipPublicInputsV2) -> bool {
+    public_inputs.version > 0
+        && public_inputs.chain_id != 0
+        && public_inputs.epoch_seed != [0u8; 32]
+        && public_inputs.validator_root != [0u8; 32]
+}
+
+pub fn verify_leadership_claim<B: LeadershipBackend>(
+    backend: &B,
+    claim: &LeadershipClaimV2,
+) -> Result<(), LeadershipBackendError> {
+    if !verify_public_inputs_only(&claim.public_inputs) {
+        return Err(LeadershipBackendError::ChallengeMismatch);
+    }
+
+    let proof_ok = backend.verify(&claim.public_inputs, &claim.proof)?;
+    if !proof_ok {
+        return Err(LeadershipBackendError::SignatureFailed);
+    }
+
+    let commitment = crate::pol::proof::proof_commitment(
+        &claim.public_inputs,
+        &claim.proof.witness_commitment,
+        &claim.proof.challenge_digest,
+    );
+
+    if commitment != claim.claim_commitment {
+        return Err(LeadershipBackendError::CommitmentMismatch);
+    }
+
+    Ok(())
+}
+
+// crates/cryptarchia-lll/src/pol/engine.rs
+use alloc::vec::Vec;
+
+use crate::crypto::{derive_alias, derive_ticket, random_node_secret, ticket_below_threshold, NodeSecret};
+use crate::pol::blind::{blind_slot_nonce, blind_ticket_nonce};
+use crate::pol::commitment::{commitment_bytes, commitment_u128, commitment_u64, hash_bytes32};
+use crate::pol::difficulty::{next_threshold, DifficultyPolicy, LotteryDifficulty};
+use crate::pol::proof::{LeadershipBackend, LeadershipBackendError, LeadershipProofV2, SignatureTranscriptBackend};
+use crate::pol::types::{
+    EpochId, EpochLeadershipState, LeaderIdentityCommitment, LeadershipClaimStatus, LeadershipClaimV2,
+    LeadershipPublicInputsV2, LeadershipWitnessV2, ProposalCommitment, ProofOfLeadershipConfig,
+};
+use crate::pol::verifier::verify_leadership_claim;
+use crate::pol::vrf::{derive_epoch_vrf_keypair, prove_vrf};
+use crate::{ChainId, EpochSchedule, Slot, StakeTable, LllError, LllResult};
+
+#[derive(Clone, Debug)]
+pub struct ProofOfLeadershipEngine<B = SignatureTranscriptBackend> {
+    pub config: ProofOfLeadershipConfig,
+    pub schedule: EpochSchedule,
+    pub node_secret: NodeSecret,
+    pub node_commitment: [u8; 32],
+    pub previous_epoch_output: [u8; 32],
+    pub validator_table: StakeTable,
+    pub difficulty_policy: DifficultyPolicy,
+    pub backend: B,
+}
+
+impl ProofOfLeadershipEngine<SignatureTranscriptBackend> {
+    pub fn default_for_node(
+        config: ProofOfLeadershipConfig,
+        schedule: EpochSchedule,
+        node_secret: NodeSecret,
+        node_commitment: [u8; 32],
+        previous_epoch_output: [u8; 32],
+        validator_table: StakeTable,
+    ) -> Self {
+        Self {
+            config,
+            schedule,
+            node_secret,
+            node_commitment,
+            previous_epoch_output,
+            validator_table,
+            difficulty_policy: DifficultyPolicy::default(),
+            backend: SignatureTranscriptBackend,
+        }
+    }
+}
+
+impl<B: LeadershipBackend> ProofOfLeadershipEngine<B> {
+    pub fn new(
+        config: ProofOfLeadershipConfig,
+        schedule: EpochSchedule,
+        node_secret: NodeSecret,
+        node_commitment: [u8; 32],
+        previous_epoch_output: [u8; 32],
+        validator_table: StakeTable,
+        difficulty_policy: DifficultyPolicy,
+        backend: B,
+    ) -> Self {
+        Self {
+            config,
+            schedule,
+            node_secret,
+            node_commitment,
+            previous_epoch_output,
+            validator_table,
+            difficulty_policy,
+            backend,
+        }
+    }
+
+    pub fn epoch_id_for_slot(&self, slot: Slot) -> EpochId {
+        self.schedule.slot_to_epoch(slot)
+    }
+
+    pub fn leader_identity_commitment(&self, epoch_seed: &[u8; 32], epoch_id: EpochId) -> [u8; 32] {
+        let alias = derive_alias(
+            self.config.chain_id,
+            epoch_id,
+            epoch_seed,
+            &self.node_secret.secret,
+        );
+
+        hash_bytes32(
+            "cryptarchia/pol/v2/leader-identity",
+            &[
+                &alias.0,
+                &self.node_commitment,
+                &epoch_seed[..],
+                &self.previous_epoch_output,
+            ],
+        )
+    }
+
+    pub fn stake_for_node(&self) -> u128 {
+        self.validator_table
+            .validators
+            .iter()
+            .find(|v| v.node_commitment == self.node_commitment)
+            .map(|v| v.stake)
+            .unwrap_or(0)
+    }
+
+    pub fn evaluate_slot(
+        &self,
+        slot: Slot,
+        epoch_seed: [u8; 32],
+        beacon_seed: [u8; 32],
+        validator_root: [u8; 32],
+        stake_root: [u8; 32],
+    ) -> LllResult<Option<LeadershipClaimV2>> {
+        let epoch_id = self.epoch_id_for_slot(slot);
+        let stake = self.stake_for_node();
+        let total_stake = self.validator_table.total_stake();
+
+        if stake < self.config.min_stake_for_win || total_stake == 0 {
+            return Ok(None);
+        }
+
+        let slot_nonce = blind_slot_nonce(
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &self.previous_epoch_output,
+            &self.node_secret.secret,
+        );
+
+        let vrf_keypair = derive_epoch_vrf_keypair(&self.node_secret.secret, &epoch_seed);
+        let vrf_message = crate::pol::commitment::hash_bytes32(
+            "cryptarchia/pol/v2/vrf-message",
+            &[
+                &self.config.chain_id.to_le_bytes(),
+                &epoch_id.to_le_bytes(),
+                &slot.to_le_bytes(),
+                &slot_nonce,
+                &beacon_seed,
+                &validator_root,
+                &stake_root,
+            ],
+        );
+
+        let vrf = prove_vrf(&vrf_keypair, &vrf_message);
+        let blinded_ticket_nonce = blind_ticket_nonce(
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &slot_nonce,
+            &vrf.output,
+        );
+
+        let threshold = next_threshold(
+            self.difficulty_policy,
+            epoch_id,
+            self.config.target_win_ppm,
+            self.config.target_win_ppm,
+            stake,
+        )
+        .threshold;
+
+        let ticket = derive_ticket(
+            &self.node_secret,
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &blinded_ticket_nonce,
+            stake,
+            total_stake,
+            &validator_root,
+        );
+
+        if !ticket_below_threshold(&ticket, threshold) {
+            return Ok(None);
+        }
+
+        let leader_commitment = self.leader_identity_commitment(&epoch_seed, epoch_id);
+        let stake_commitment = crate::pol::commitment::commitment_u128("cryptarchia/pol/v2/stake", stake);
+        let total_stake_commitment =
+            crate::pol::commitment::commitment_u128("cryptarchia/pol/v2/total-stake", total_stake);
+        let threshold_commitment =
+            crate::pol::commitment::commitment_u128("cryptarchia/pol/v2/threshold-value", threshold);
+        let slot_nonce_commitment =
+            commitment_bytes("cryptarchia/pol/v2/slot-nonce", &slot_nonce);
+        let ticket_commitment = commitment_bytes("cryptarchia/pol/v2/ticket", &ticket);
+        let proposal_commitment = commitment_bytes(
+            "cryptarchia/pol/v2/proposal",
+            &[
+                &self.config.chain_id.to_le_bytes(),
+                &epoch_id.to_le_bytes(),
+                &slot.to_le_bytes(),
+                &beacon_seed,
+                &validator_root,
+                &stake_root,
+                &ticket,
+                &threshold.to_le_bytes(),
+            ]
+            .concat(),
+        );
+
+        let public_inputs = LeadershipPublicInputsV2 {
+            version: self.config.proof_version,
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            epoch_seed,
+            previous_epoch_output_commitment: commitment_bytes(
+                "cryptarchia/pol/v2/previous-epoch-output",
+                &self.previous_epoch_output,
+            ),
+            beacon_seed,
+            validator_root,
+            stake_root,
+            leader_identity_commitment: leader_commitment,
+            slot_nonce_commitment,
+            threshold_commitment,
+            ticket_commitment,
+            proposal_commitment,
+        };
+
+        let witness = LeadershipWitnessV2 {
+            leader_secret: self.node_secret.secret,
+            epoch_vrf_secret: vrf_keypair.secret,
+            blinded_slot_nonce: slot_nonce,
+            stake,
+            total_stake,
+            threshold,
+            ticket,
+            vrf_output: vrf.output,
+            vrf_proof: vrf.proof,
+            leader_identity_commitment: leader_commitment,
+            stake_commitment,
+            total_stake_commitment,
+            threshold_commitment,
+            ticket_commitment,
+        };
+
+        let proof = self.backend.prove(&public_inputs, &witness).map_err(|e| {
+            LllError::ProofVerificationFailed(format!("backend prove failed: {e}"))
+        })?;
+
+        let claim_commitment = crate::pol::proof::proof_commitment(
+            &public_inputs,
+            &proof.witness_commitment,
+            &proof.challenge_digest,
+        );
+
+        Ok(Some(LeadershipClaimV2 {
+            public_inputs,
+            proof,
+            claim_commitment,
+            status: LeadershipClaimStatus::Proven,
+        }))
+    }
+
+    pub fn verify_claim(&self, claim: &LeadershipClaimV2) -> LllResult<()> {
+        verify_leadership_claim(&self.backend, claim).map_err(|e| {
+            LllError::ProofVerificationFailed(format!("{e}"))
+        })
+    }
+}
+
+// crates/cryptarchia-lll/src/pol/backend.rs
+pub use crate::pol::proof::{LeadershipBackend, LeadershipBackendError, SignatureTranscriptBackend};
+
+// crates/cryptarchia-lll/src/pol/verifier.rs
+pub use crate::pol::proof::{LeadershipBackendError, LeadershipBackend};
+pub use crate::pol::engine::ProofOfLeadershipEngine;
+pub use crate::pol::proof::LeadershipClaimV2;
+pub use crate::pol::proof::LeadershipPublicInputsV2;
+pub use crate::pol::proof::LeadershipProofV2;
+
+use crate::pol::proof::LeadershipBackend as _;
+use crate::pol::types::{LeadershipClaimV2 as Claim};
+
+pub fn verify_public_inputs_only(public_inputs: &crate::pol::types::LeadershipPublicInputsV2) -> bool {
+    public_inputs.version > 0
+        && public_inputs.chain_id != 0
+        && public_inputs.epoch_seed != [0u8; 32]
+        && public_inputs.validator_root != [0u8; 32]
+        && public_inputs.stake_root != [0u8; 32]
+}
+
+pub fn verify_leadership_claim<B: crate::pol::proof::LeadershipBackend>(
+    backend: &B,
+    claim: &crate::pol::types::LeadershipClaimV2,
+) -> Result<(), crate::pol::proof::LeadershipBackendError> {
+    if !verify_public_inputs_only(&claim.public_inputs) {
+        return Err(crate::pol::proof::LeadershipBackendError::ChallengeMismatch);
+    }
+
+    let proof_ok = backend.verify(&claim.public_inputs, &claim.proof)?;
+    if !proof_ok {
+        return Err(crate::pol::proof::LeadershipBackendError::SignatureFailed);
+    }
+
+    let expected = crate::pol::proof::proof_commitment(
+        &claim.public_inputs,
+        &claim.proof.witness_commitment,
+        &claim.proof.challenge_digest,
+    );
+
+    if expected != claim.claim_commitment {
+        return Err(crate::pol::proof::LeadershipBackendError::CommitmentMismatch);
+    }
+
+    Ok(())
+}
+
+// crates/cryptarchia-lll/src/pol/proof.rs
+use alloc::vec::Vec;
+
+use crate::pol::commitment::hash_bytes32;
+use crate::pol::types::{
+    LeadershipClaimStatus, LeadershipClaimV2, LeadershipProofV2, LeadershipPublicInputsV2,
+    LeadershipWitnessV2,
+};
+
+pub fn proof_witness_commitment(witness: &LeadershipWitnessV2) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/witness",
+        &[
+            &witness.leader_secret,
+            &witness.epoch_vrf_secret,
+            &witness.blinded_slot_nonce,
+            &witness.stake.to_le_bytes(),
+            &witness.total_stake.to_le_bytes(),
+            &witness.threshold.to_le_bytes(),
+            &witness.ticket,
+            &witness.vrf_output,
+            &witness.vrf_proof,
+            &witness.leader_identity_commitment,
+            &witness.stake_commitment,
+            &witness.total_stake_commitment,
+            &witness.threshold_commitment,
+            &witness.ticket_commitment,
+        ],
+    )
+}
+
+pub fn proof_challenge(
+    public_inputs: &LeadershipPublicInputsV2,
+    witness_commitment: &[u8; 32],
+) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/challenge",
+        &[
+            &public_inputs.version.to_le_bytes(),
+            &public_inputs.chain_id.to_le_bytes(),
+            &public_inputs.epoch_id.to_le_bytes(),
+            &public_inputs.slot.to_le_bytes(),
+            &public_inputs.epoch_seed,
+            &public_inputs.previous_epoch_output_commitment,
+            &public_inputs.beacon_seed,
+            &public_inputs.validator_root,
+            &public_inputs.stake_root,
+            &public_inputs.leader_identity_commitment,
+            &public_inputs.slot_nonce_commitment,
+            &public_inputs.threshold_commitment,
+            &public_inputs.ticket_commitment,
+            &public_inputs.proposal_commitment,
+            witness_commitment,
+        ],
+    )
+}
+
+pub fn proof_commitment(
+    public_inputs: &LeadershipPublicInputsV2,
+    witness_commitment: &[u8; 32],
+    challenge_digest: &[u8; 32],
+) -> [u8; 32] {
+    hash_bytes32(
+        "cryptarchia/pol/v2/proof-commitment",
+        &[
+            &public_inputs.version.to_le_bytes(),
+            &public_inputs.chain_id.to_le_bytes(),
+            &public_inputs.epoch_id.to_le_bytes(),
+            &public_inputs.slot.to_le_bytes(),
+            &public_inputs.epoch_seed,
+            &public_inputs.previous_epoch_output_commitment,
+            &public_inputs.beacon_seed,
+            &public_inputs.validator_root,
+            &public_inputs.stake_root,
+            &public_inputs.leader_identity_commitment,
+            &public_inputs.slot_nonce_commitment,
+            &public_inputs.threshold_commitment,
+            &public_inputs.ticket_commitment,
+            &public_inputs.proposal_commitment,
+            witness_commitment,
+            challenge_digest,
+        ],
+    )
+}
+
+pub trait LeadershipBackend {
+    fn prove(
+        &self,
+        public_inputs: &LeadershipPublicInputsV2,
+        witness: &LeadershipWitnessV2,
+    ) -> Result<LeadershipProofV2, LeadershipBackendError>;
+
+    fn verify(
+        &self,
+        public_inputs: &LeadershipPublicInputsV2,
+        proof: &LeadershipProofV2,
+    ) -> Result<bool, LeadershipBackendError>;
+}
+
+#[derive(Clone, Debug, thiserror::Error, PartialEq, Eq)]
+pub enum LeadershipBackendError {
+    #[error("invalid proof version")]
+    InvalidVersion,
+    #[error("signature verification failed")]
+    SignatureFailed,
+    #[error("challenge mismatch")]
+    ChallengeMismatch,
+    #[error("proof commitment mismatch")]
+    CommitmentMismatch,
+}
+
+// crates/cryptarchia-lll/src/pol/vrf.rs
+use alloc::vec::Vec;
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+
+use crate::pol::commitment::hash_bytes32;
+
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LeadershipVrfKeypair {
+    pub secret: [u8; 32],
+    pub public: [u8; 32],
+}
+
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LeadershipVrfProof {
+    pub output: [u8; 32],
+    pub proof: [u8; 64],
+    pub public_key: [u8; 32],
+}
+
+pub fn derive_epoch_vrf_keypair(leader_secret: &[u8; 32], epoch_seed: &[u8; 32]) -> LeadershipVrfKeypair {
+    let secret = hash_bytes32(
+        "cryptarchia/pol/v2/epoch-vrf-secret",
+        &[leader_secret, epoch_seed],
+    );
+    let signing_key = SigningKey::from_bytes(&secret);
+    let public = signing_key.verifying_key().to_bytes();
+
+    LeadershipVrfKeypair { secret, public }
+}
+
+pub fn prove_vrf(
+    keypair: &LeadershipVrfKeypair,
+    message: &[u8],
+) -> LeadershipVrfProof {
+    let signing_key = SigningKey::from_bytes(&keypair.secret);
+    let signature = signing_key.sign(message);
+    let output = hash_bytes32(
+        "cryptarchia/pol/v2/vrf-output",
+        &[signature.to_bytes().as_ref(), message],
+    );
+
+    LeadershipVrfProof {
+        output,
+        proof: signature.to_bytes(),
+        public_key: keypair.public,
+    }
+}
+
+pub fn verify_vrf(
+    public_key: &[u8; 32],
+    message: &[u8],
+    proof: &LeadershipVrfProof,
+) -> bool {
+    if public_key != &proof.public_key {
+        return false;
+    }
+
+    let vk = match VerifyingKey::from_bytes(public_key) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+
+    let sig = match Signature::from_bytes(&proof.proof) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    if vk.verify(message, &sig).is_err() {
+        return false;
+    }
+
+    let expected = hash_bytes32(
+        "cryptarchia/pol/v2/vrf-output",
+        &[proof.proof.as_ref(), message],
+    );
+
+    expected == proof.output
+}
+
+// crates/cryptarchia-lll/src/pol/difficulty.rs
+use crate::pol::commitment::commitment_bytes;
+
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LotteryDifficulty {
+    pub epoch_id: u64,
+    pub target_win_ppm: u64,
+    pub observed_win_ppm: u64,
+    pub estimated_total_stake: u128,
+    pub threshold: u128,
+    pub threshold_commitment: [u8; 32],
+}
+
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TotalStakeEstimate {
+    pub epoch_id: u64,
+    pub sample_size: u64,
+    pub observed_successes: u64,
+    pub estimated_total_stake: u128,
+    pub uncertainty_ppm: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DifficultyPolicy {
+    pub target_win_ppm: u64,
+    pub alpha_ppm: u64,
+    pub min_threshold: u128,
+    pub max_threshold: u128,
+    pub floor_total_stake: u128,
+}
+
+impl Default for DifficultyPolicy {
+    fn default() -> Self {
+        Self {
+            target_win_ppm: 25_000,
+            alpha_ppm: 100_000,
+            min_threshold: 1,
+            max_threshold: u128::MAX,
+            floor_total_stake: 1,
+        }
+    }
+}
+
+pub fn estimate_total_active_stake(
+    sample_active_stake: u128,
+    observed_win_ppm: u64,
+    target_win_ppm: u64,
+) -> u128 {
+    if target_win_ppm == 0 {
+        return sample_active_stake;
+    }
+
+    let ratio = observed_win_ppm.max(1) as u128;
+    let target = target_win_ppm.max(1) as u128;
+
+    sample_active_stake
+        .saturating_mul(ratio)
+        .saturating_div(target)
+        .max(1)
+}
+
+pub fn threshold_from_target_ppm(total_stake: u128, target_win_ppm: u64) -> u128 {
+    if total_stake == 0 {
+        return 0;
+    }
+    total_stake.saturating_mul(target_win_ppm as u128) / 1_000_000u128
+}
+
+pub fn next_threshold(
+    policy: DifficultyPolicy,
+    epoch_id: u64,
+    target_win_ppm: u64,
+    observed_win_ppm: u64,
+    sample_active_stake: u128,
+) -> LotteryDifficulty {
+    let estimated_total_stake =
+        estimate_total_active_stake(sample_active_stake.max(policy.floor_total_stake), observed_win_ppm, target_win_ppm);
+
+    let threshold = threshold_from_target_ppm(estimated_total_stake, target_win_ppm)
+        .max(policy.min_threshold)
+        .min(policy.max_threshold);
+
+    let threshold_commitment = commitment_bytes(
+        "cryptarchia/pol/v2/threshold",
+        &[
+            &epoch_id.to_le_bytes(),
+            &target_win_ppm.to_le_bytes(),
+            &observed_win_ppm.to_le_bytes(),
+            &estimated_total_stake.to_le_bytes(),
+            &threshold.to_le_bytes(),
+        ]
+        .concat(),
+    );
+
+    LotteryDifficulty {
+        epoch_id,
+        target_win_ppm,
+        observed_win_ppm,
+        estimated_total_stake,
+        threshold,
+        threshold_commitment,
+    }
+}
+
+// crates/cryptarchia-lll/src/pol/engine.rs
+use alloc::vec::Vec;
+
+use crate::crypto::{derive_alias, derive_ticket, ticket_below_threshold, NodeSecret};
+use crate::pol::blind::{blind_slot_nonce, blind_ticket_nonce};
+use crate::pol::commitment::{commitment_bytes, commitment_u128, hash_bytes32};
+use crate::pol::difficulty::{next_threshold, DifficultyPolicy};
+use crate::pol::proof::{
+    proof_commitment, proof_witness_commitment, LeadershipBackend, LeadershipBackendError,
+    LeadershipProofV2, LeadershipPublicInputsV2, LeadershipWitnessV2,
+};
+use crate::pol::types::{
+    EpochId, LeadershipClaimStatus, LeadershipClaimV2, ProofOfLeadershipConfig,
+};
+use crate::pol::vrf::{derive_epoch_vrf_keypair, prove_vrf};
+use crate::{EpochSchedule, Slot, StakeTable, LllError, LllResult};
+
+#[derive(Clone, Debug)]
+pub struct ProofOfLeadershipEngine<B = crate::pol::proof::SignatureTranscriptBackend> {
+    pub config: ProofOfLeadershipConfig,
+    pub schedule: EpochSchedule,
+    pub node_secret: NodeSecret,
+    pub node_commitment: [u8; 32],
+    pub previous_epoch_output: [u8; 32],
+    pub validator_table: StakeTable,
+    pub difficulty_policy: DifficultyPolicy,
+    pub backend: B,
+}
+
+impl ProofOfLeadershipEngine<crate::pol::proof::SignatureTranscriptBackend> {
+    pub fn default_for_node(
+        config: ProofOfLeadershipConfig,
+        schedule: EpochSchedule,
+        node_secret: NodeSecret,
+        node_commitment: [u8; 32],
+        previous_epoch_output: [u8; 32],
+        validator_table: StakeTable,
+    ) -> Self {
+        Self {
+            config,
+            schedule,
+            node_secret,
+            node_commitment,
+            previous_epoch_output,
+            validator_table,
+            difficulty_policy: DifficultyPolicy::default(),
+            backend: crate::pol::proof::SignatureTranscriptBackend,
+        }
+    }
+}
+
+impl<B: LeadershipBackend> ProofOfLeadershipEngine<B> {
+    pub fn new(
+        config: ProofOfLeadershipConfig,
+        schedule: EpochSchedule,
+        node_secret: NodeSecret,
+        node_commitment: [u8; 32],
+        previous_epoch_output: [u8; 32],
+        validator_table: StakeTable,
+        difficulty_policy: DifficultyPolicy,
+        backend: B,
+    ) -> Self {
+        Self {
+            config,
+            schedule,
+            node_secret,
+            node_commitment,
+            previous_epoch_output,
+            validator_table,
+            difficulty_policy,
+            backend,
+        }
+    }
+
+    pub fn epoch_id_for_slot(&self, slot: Slot) -> EpochId {
+        self.schedule.slot_to_epoch(slot)
+    }
+
+    pub fn stake_for_node(&self) -> u128 {
+        self.validator_table
+            .validators
+            .iter()
+            .find(|v| v.node_commitment == self.node_commitment)
+            .map(|v| v.stake)
+            .unwrap_or(0)
+    }
+
+    pub fn leader_identity_commitment(&self, epoch_seed: &[u8; 32], epoch_id: EpochId) -> [u8; 32] {
+        let alias = derive_alias(
+            self.config.chain_id,
+            epoch_id,
+            epoch_seed,
+            &self.node_secret.secret,
+        );
+
+        hash_bytes32(
+            "cryptarchia/pol/v2/leader-identity",
+            &[
+                &alias.0,
+                &self.node_commitment,
+                epoch_seed,
+                &self.previous_epoch_output,
+            ],
+        )
+    }
+
+    pub fn evaluate_slot(
+        &self,
+        slot: Slot,
+        epoch_seed: [u8; 32],
+        beacon_seed: [u8; 32],
+        validator_root: [u8; 32],
+        stake_root: [u8; 32],
+    ) -> LllResult<Option<LeadershipClaimV2>> {
+        let epoch_id = self.epoch_id_for_slot(slot);
+        let stake = self.stake_for_node();
+        let total_stake = self.validator_table.total_stake();
+
+        if stake < self.config.min_stake_for_win || total_stake == 0 {
+            return Ok(None);
+        }
+
+        let slot_nonce = blind_slot_nonce(
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &self.previous_epoch_output,
+            &self.node_secret.secret,
+        );
+
+        let vrf_keypair = derive_epoch_vrf_keypair(&self.node_secret.secret, &epoch_seed);
+        let vrf_message = crate::pol::commitment::hash_bytes32(
+            "cryptarchia/pol/v2/vrf-message",
+            &[
+                &self.config.chain_id.to_le_bytes(),
+                &epoch_id.to_le_bytes(),
+                &slot.to_le_bytes(),
+                &slot_nonce,
+                &beacon_seed,
+                &validator_root,
+                &stake_root,
+            ],
+        );
+
+        let vrf = prove_vrf(&vrf_keypair, &vrf_message);
+        let blinded_ticket_nonce = blind_ticket_nonce(
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &slot_nonce,
+            &vrf.output,
+        );
+
+        let threshold = next_threshold(
+            self.difficulty_policy,
+            epoch_id,
+            self.config.target_win_ppm,
+            self.config.target_win_ppm,
+            stake,
+        )
+        .threshold;
+
+        let ticket = derive_ticket(
+            &self.node_secret,
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &blinded_ticket_nonce,
+            stake,
+            total_stake,
+            &validator_root,
+        );
+
+        if !ticket_below_threshold(&ticket, threshold) {
+            return Ok(None);
+        }
+
+        let leader_commitment = self.leader_identity_commitment(&epoch_seed, epoch_id);
+        let stake_commitment = commitment_u128("cryptarchia/pol/v2/stake", stake);
+        let total_stake_commitment =
+            commitment_u128("cryptarchia/pol/v2/total-stake", total_stake);
+        let threshold_commitment =
+            commitment_u128("cryptarchia/pol/v2/threshold-value", threshold);
+        let slot_nonce_commitment =
+            commitment_bytes("cryptarchia/pol/v2/slot-nonce", &slot_nonce);
+        let ticket_commitment = commitment_bytes("cryptarchia/pol/v2/ticket", &ticket);
+        let proposal_commitment = commitment_bytes(
+            "cryptarchia/pol/v2/proposal",
+            &[
+                &self.config.chain_id.to_le_bytes(),
+                &epoch_id.to_le_bytes(),
+                &slot.to_le_bytes(),
+                &beacon_seed,
+                &validator_root,
+                &stake_root,
+                &ticket,
+                &threshold.to_le_bytes(),
+            ]
+            .concat(),
+        );
+
+        let public_inputs = LeadershipPublicInputsV2 {
+            version: self.config.proof_version,
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            epoch_seed,
+            previous_epoch_output_commitment: commitment_bytes(
+                "cryptarchia/pol/v2/previous-epoch-output",
+                &self.previous_epoch_output,
+            ),
+            beacon_seed,
+            validator_root,
+            stake_root,
+            leader_identity_commitment: leader_commitment,
+            slot_nonce_commitment,
+            threshold_commitment,
+            ticket_commitment,
+            proposal_commitment,
+        };
+
+        let witness = LeadershipWitnessV2 {
+            leader_secret: self.node_secret.secret,
+            epoch_vrf_secret: vrf_keypair.secret,
+            blinded_slot_nonce: slot_nonce,
+            stake,
+            total_stake,
+            threshold,
+            ticket,
+            vrf_output: vrf.output,
+            vrf_proof: vrf.proof,
+            leader_identity_commitment: leader_commitment,
+            stake_commitment,
+            total_stake_commitment,
+            threshold_commitment,
+            ticket_commitment,
+        };
+
+        let proof = self.backend.prove(&public_inputs, &witness).map_err(|e| {
+            LllError::ProofVerificationFailed(format!("backend prove failed: {e}"))
+        })?;
+
+        let claim_commitment = proof_commitment(
+            &public_inputs,
+            &proof.witness_commitment,
+            &proof.challenge_digest,
+        );
+
+        Ok(Some(LeadershipClaimV2 {
+            public_inputs,
+            proof,
+            claim_commitment,
+            status: LeadershipClaimStatus::Proven,
+        }))
+    }
+
+    pub fn verify_claim(&self, claim: &LeadershipClaimV2) -> LllResult<()> {
+        crate::pol::verifier::verify_leadership_claim(&self.backend, claim).map_err(|e| {
+            LllError::ProofVerificationFailed(format!("{e}"))
+        })
+    }
+}
+
+// crates/cryptarchia-lll/src/pol/commitment.rs
+use alloc::vec::Vec;
+use sha2::{Digest, Sha256};
+
+pub fn hash_bytes32(domain: &str, parts: &[&[u8]]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(domain.as_bytes());
+    for part in parts {
+        hasher.update(part);
+    }
+    hasher.finalize().into()
+}
+
+pub fn hash_concat32(domain: &str, left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
+    hash_bytes32(domain, &[left.as_ref(), right.as_ref()])
+}
+
+pub fn commitment_bytes(domain: &str, bytes: &[u8]) -> [u8; 32] {
+    hash_bytes32(domain, &[bytes])
+}
+
+pub fn commitment_u128(domain: &str, value: u128) -> [u8; 32] {
+    commitment_bytes(domain, &value.to_le_bytes())
+}
+
+pub fn commitment_u64(domain: &str, value: u64) -> [u8; 32] {
+    commitment_bytes(domain, &value.to_le_bytes())
+}
+
+pub fn commitment_hex(domain: &str, bytes: &[u8]) -> String {
+    hex::encode(commitment_bytes(domain, bytes))
+}
+
+pub fn domain_hash32(domain: &str, bytes: &[u8]) -> [u8; 32] {
+    hash_bytes32(domain, &[bytes])
+}
+
+// crates/cryptarchia-lll/src/pol/verifier.rs
+use crate::pol::proof::{LeadershipBackend, LeadershipBackendError};
+use crate::pol::types::LeadershipPublicInputsV2;
+
+pub fn verify_public_inputs_only(public_inputs: &LeadershipPublicInputsV2) -> bool {
+    public_inputs.version > 0
+        && public_inputs.chain_id != 0
+        && public_inputs.epoch_seed != [0u8; 32]
+        && public_inputs.validator_root != [0u8; 32]
+        && public_inputs.stake_root != [0u8; 32]
+}
+
+pub fn verify_leadership_claim<B: LeadershipBackend>(
+    backend: &B,
+    claim: &crate::pol::types::LeadershipClaimV2,
+) -> Result<(), LeadershipBackendError> {
+    if !verify_public_inputs_only(&claim.public_inputs) {
+        return Err(LeadershipBackendError::ChallengeMismatch);
+    }
+
+    let proof_ok = backend.verify(&claim.public_inputs, &claim.proof)?;
+    if !proof_ok {
+        return Err(LeadershipBackendError::SignatureFailed);
+    }
+
+    let expected = crate::pol::proof::proof_commitment(
+        &claim.public_inputs,
+        &claim.proof.witness_commitment,
+        &claim.proof.challenge_digest,
+    );
+
+    if expected != claim.claim_commitment {
+        return Err(LeadershipBackendError::CommitmentMismatch);
+    }
+
+    Ok(())
+}
+
+// crates/cryptarchia-lll/src/pol/engine.rs
+use alloc::vec::Vec;
+
+use crate::crypto::{derive_alias, derive_ticket, random_node_secret, ticket_below_threshold, NodeSecret};
+use crate::pol::blind::{blind_slot_nonce, blind_ticket_nonce};
+use crate::pol::commitment::{commitment_bytes, commitment_u128, hash_bytes32};
+use crate::pol::difficulty::{next_threshold, DifficultyPolicy};
+use crate::pol::proof::{
+    proof_commitment, LeadershipBackend, LeadershipProofV2, LeadershipPublicInputsV2,
+    LeadershipWitnessV2,
+};
+use crate::pol::types::{
+    EpochId, LeadershipClaimStatus, LeadershipClaimV2, ProofOfLeadershipConfig,
+};
+use crate::{EpochSchedule, Slot, StakeTable, LllError, LllResult};
+
+#[derive(Clone, Debug)]
+pub struct ProofOfLeadershipEngine<B = crate::pol::proof::SignatureTranscriptBackend> {
+    pub config: ProofOfLeadershipConfig,
+    pub schedule: EpochSchedule,
+    pub node_secret: NodeSecret,
+    pub node_commitment: [u8; 32],
+    pub previous_epoch_output: [u8; 32],
+    pub validator_table: StakeTable,
+    pub difficulty_policy: DifficultyPolicy,
+    pub backend: B,
+}
+
+impl ProofOfLeadershipEngine<crate::pol::proof::SignatureTranscriptBackend> {
+    pub fn default_for_node(
+        config: ProofOfLeadershipConfig,
+        schedule: EpochSchedule,
+        node_secret: NodeSecret,
+        node_commitment: [u8; 32],
+        previous_epoch_output: [u8; 32],
+        validator_table: StakeTable,
+    ) -> Self {
+        Self {
+            config,
+            schedule,
+            node_secret,
+            node_commitment,
+            previous_epoch_output,
+            validator_table,
+            difficulty_policy: DifficultyPolicy::default(),
+            backend: crate::pol::proof::SignatureTranscriptBackend,
+        }
+    }
+}
+
+impl<B: LeadershipBackend> ProofOfLeadershipEngine<B> {
+    pub fn new(
+        config: ProofOfLeadershipConfig,
+        schedule: EpochSchedule,
+        node_secret: NodeSecret,
+        node_commitment: [u8; 32],
+        previous_epoch_output: [u8; 32],
+        validator_table: StakeTable,
+        difficulty_policy: DifficultyPolicy,
+        backend: B,
+    ) -> Self {
+        Self {
+            config,
+            schedule,
+            node_secret,
+            node_commitment,
+            previous_epoch_output,
+            validator_table,
+            difficulty_policy,
+            backend,
+        }
+    }
+
+    pub fn epoch_id_for_slot(&self, slot: Slot) -> EpochId {
+        self.schedule.slot_to_epoch(slot)
+    }
+
+    pub fn stake_for_node(&self) -> u128 {
+        self.validator_table
+            .validators
+            .iter()
+            .find(|v| v.node_commitment == self.node_commitment)
+            .map(|v| v.stake)
+            .unwrap_or(0)
+    }
+
+    pub fn leader_identity_commitment(&self, epoch_seed: &[u8; 32], epoch_id: EpochId) -> [u8; 32] {
+        let alias = derive_alias(
+            self.config.chain_id,
+            epoch_id,
+            epoch_seed,
+            &self.node_secret.secret,
+        );
+
+        hash_bytes32(
+            "cryptarchia/pol/v2/leader-identity",
+            &[
+                &alias.0,
+                &self.node_commitment,
+                epoch_seed,
+                &self.previous_epoch_output,
+            ],
+        )
+    }
+
+    pub fn evaluate_slot(
+        &self,
+        slot: Slot,
+        epoch_seed: [u8; 32],
+        beacon_seed: [u8; 32],
+        validator_root: [u8; 32],
+        stake_root: [u8; 32],
+    ) -> LllResult<Option<LeadershipClaimV2>> {
+        let epoch_id = self.epoch_id_for_slot(slot);
+        let stake = self.stake_for_node();
+        let total_stake = self.validator_table.total_stake();
+
+        if stake < self.config.min_stake_for_win || total_stake == 0 {
+            return Ok(None);
+        }
+
+        let slot_nonce = blind_slot_nonce(
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &self.previous_epoch_output,
+            &self.node_secret.secret,
+        );
+
+        let vrf_keypair = crate::pol::vrf::derive_epoch_vrf_keypair(&self.node_secret.secret, &epoch_seed);
+        let vrf_message = crate::pol::commitment::hash_bytes32(
+            "cryptarchia/pol/v2/vrf-message",
+            &[
+                &self.config.chain_id.to_le_bytes(),
+                &epoch_id.to_le_bytes(),
+                &slot.to_le_bytes(),
+                &slot_nonce,
+                &beacon_seed,
+                &validator_root,
+                &stake_root,
+            ],
+        );
+
+        let vrf = crate::pol::vrf::prove_vrf(&vrf_keypair, &vrf_message);
+        let blinded_ticket_nonce = blind_ticket_nonce(
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &slot_nonce,
+            &vrf.output,
+        );
+
+        let threshold = next_threshold(
+            self.difficulty_policy,
+            epoch_id,
+            self.config.target_win_ppm,
+            self.config.target_win_ppm,
+            stake,
+        )
+        .threshold;
+
+        let ticket = derive_ticket(
+            &self.node_secret,
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &blinded_ticket_nonce,
+            stake,
+            total_stake,
+            &validator_root,
+        );
+
+        if !ticket_below_threshold(&ticket, threshold) {
+            return Ok(None);
+        }
+
+        let leader_commitment = self.leader_identity_commitment(&epoch_seed, epoch_id);
+        let stake_commitment = commitment_u128("cryptarchia/pol/v2/stake", stake);
+        let total_stake_commitment =
+            commitment_u128("cryptarchia/pol/v2/total-stake", total_stake);
+        let threshold_commitment =
+            commitment_u128("cryptarchia/pol/v2/threshold-value", threshold);
+        let slot_nonce_commitment =
+            commitment_bytes("cryptarchia/pol/v2/slot-nonce", &slot_nonce);
+        let ticket_commitment = commitment_bytes("cryptarchia/pol/v2/ticket", &ticket);
+        let proposal_commitment = commitment_bytes(
+            "cryptarchia/pol/v2/proposal",
+            &[
+                &self.config.chain_id.to_le_bytes(),
+                &epoch_id.to_le_bytes(),
+                &slot.to_le_bytes(),
+                &beacon_seed,
+                &validator_root,
+                &stake_root,
+                &ticket,
+                &threshold.to_le_bytes(),
+            ]
+            .concat(),
+        );
+
+        let public_inputs = LeadershipPublicInputsV2 {
+            version: self.config.proof_version,
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            epoch_seed,
+            previous_epoch_output_commitment: commitment_bytes(
+                "cryptarchia/pol/v2/previous-epoch-output",
+                &self.previous_epoch_output,
+            ),
+            beacon_seed,
+            validator_root,
+            stake_root,
+            leader_identity_commitment: leader_commitment,
+            slot_nonce_commitment,
+            threshold_commitment,
+            ticket_commitment,
+            proposal_commitment,
+        };
+
+        let witness = LeadershipWitnessV2 {
+            leader_secret: self.node_secret.secret,
+            epoch_vrf_secret: vrf_keypair.secret,
+            blinded_slot_nonce: slot_nonce,
+            stake,
+            total_stake,
+            threshold,
+            ticket,
+            vrf_output: vrf.output,
+            vrf_proof: vrf.proof,
+            leader_identity_commitment: leader_commitment,
+            stake_commitment,
+            total_stake_commitment,
+            threshold_commitment,
+            ticket_commitment,
+        };
+
+        let proof = self.backend.prove(&public_inputs, &witness).map_err(|e| {
+            LllError::ProofVerificationFailed(format!("backend prove failed: {e}"))
+        })?;
+
+        let claim_commitment = proof_commitment(
+            &public_inputs,
+            &proof.witness_commitment,
+            &proof.challenge_digest,
+        );
+
+        Ok(Some(LeadershipClaimV2 {
+            public_inputs,
+            proof,
+            claim_commitment,
+            status: LeadershipClaimStatus::Proven,
+        }))
+    }
+
+    pub fn verify_claim(&self, claim: &LeadershipClaimV2) -> LllResult<()> {
+        crate::pol::verifier::verify_leadership_claim(&self.backend, claim).map_err(|e| {
+            LllError::ProofVerificationFailed(format!("{e}"))
+        })
+    }
+}
+
+// crates/cryptarchia-lll/src/pol/backend.rs
+pub use crate::pol::proof::{LeadershipBackend, LeadershipBackendError, SignatureTranscriptBackend};
+
+// crates/cryptarchia-lll/src/pol/types.rs  [append this at the end if you keep types in a single file]
+#[cfg_attr(feature = "std", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LeadershipClaimV2 {
+    pub public_inputs: LeadershipPublicInputsV2,
+    pub proof: LeadershipProofV2,
+    pub claim_commitment: [u8; 32],
+    pub status: LeadershipClaimStatus,
+}
+
+// crates/cryptarchia-lll/src/pol/tests.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{random_node_secret, EpochSchedule, StakeTable, ValidatorRecord};
+
+    #[test]
+    fn proof_cycle_keeps_identity_and_total_stake_hidden_in_public_inputs() {
+        let mut table = StakeTable::default();
+        table.validators.push(ValidatorRecord {
+            node_commitment: [1u8; 32],
+            stake: 100_000,
+            online: true,
+            participating: true,
+        });
+
+        let engine = ProofOfLeadershipEngine::default_for_node(
+            ProofOfLeadershipConfig {
+                chain_id: 1,
+                epoch_id: 0,
+                target_win_ppm: 25_000,
+                min_stake_for_win: 1,
+                max_proposal_bytes: 1_048_576,
+                proof_version: 2,
+                hide_total_stake: true,
+            },
+            EpochSchedule {
+                epoch_length: 128,
+                slot_duration_ms: 2_000,
+                slots_per_leadership_check: 1,
+            },
+            random_node_secret(),
+            [1u8; 32],
+            [2u8; 32],
+            table,
+        );
+
+        let claim = engine
+            .evaluate_slot(7, [3u8; 32], [4u8; 32], [5u8; 32], [6u8; 32])
+            .unwrap();
+
+        if let Some(claim) = claim {
+            assert_eq!(claim.public_inputs.version, 2);
+            assert_eq!(claim.public_inputs.chain_id, 1);
+            assert!(engine.verify_claim(&claim).is_ok());
+        }
+    }
+}
+
+// crates/cryptarchia-lll/src/pol/examples/full_cycle.rs
+use cryptarchia_lll::{
+    random_node_secret, EpochSchedule, ProofOfLeadershipConfig, ProofOfLeadershipEngine,
+    StakeTable, ValidatorRecord,
+};
+
+fn main() -> anyhow::Result<()> {
+    let mut table = StakeTable::default();
+    table.validators.push(ValidatorRecord {
+        node_commitment: [1u8; 32],
+        stake: 100_000,
+        online: true,
+        participating: true,
+    });
+
+    let engine = ProofOfLeadershipEngine::default_for_node(
+        ProofOfLeadershipConfig {
+            chain_id: 1,
+            epoch_id: 0,
+            target_win_ppm: 25_000,
+            min_stake_for_win: 1,
+            max_proposal_bytes: 1_048_576,
+            proof_version: 2,
+            hide_total_stake: true,
+        },
+        EpochSchedule {
+            epoch_length: 128,
+            slot_duration_ms: 2_000,
+            slots_per_leadership_check: 1,
+        },
+        random_node_secret(),
+        [1u8; 32],
+        [2u8; 32],
+        table,
+    );
+
+    for slot in 0..32 {
+        if let Some(claim) = engine.evaluate_slot(slot, [3u8; 32], [4u8; 32], [5u8; 32], [6u8; 32])? {
+            engine.verify_claim(&claim)?;
+            println!(
+                "slot {slot}: verified PoL claim, commitment={}",
+                hex::encode(claim.claim_commitment)
+            );
+        }
+    }
+
+    Ok(())
+}
+
+// crates/cryptarchia-lll/src/lib.rs  [integration patch snippet]
+pub mod pol;
+
+pub use pol::{
+    ProofOfLeadershipEngine, ProofOfLeadershipConfig, LeadershipClaimV2, LeadershipProofV2,
+    LeadershipPublicInputsV2, LeadershipWitnessV2, LeadershipBackend, LeadershipBackendError,
+};
+
+// crates/cryptarchia-lll/src/lottery.rs  [integration patch snippet]
+impl LocalLeadershipLottery {
+    pub fn evaluate_slot_with_pol<B: crate::pol::LeadershipBackend>(
+        &self,
+        engine: &crate::pol::ProofOfLeadershipEngine<B>,
+        slot: Slot,
+        epoch_seed: [u8; 32],
+        beacon_seed: [u8; 32],
+        validator_root: [u8; 32],
+        stake_root: [u8; 32],
+    ) -> LllResult<Option<crate::pol::LeadershipClaimV2>> {
+        engine.evaluate_slot(slot, epoch_seed, beacon_seed, validator_root, stake_root)
+    }
+}
+
+This refactor keeps the public PoL transcript commitment-based, so the verifier only sees the claim commitment and proof bytes, not the proposer’s raw identity or total stake. The LeadershipBackend boundary is where you would swap in a real Groth16/Plonk backend later, without changing the rest of the engine or network-facing API.
+
+

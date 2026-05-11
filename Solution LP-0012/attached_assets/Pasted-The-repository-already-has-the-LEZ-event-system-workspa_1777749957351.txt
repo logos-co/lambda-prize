@@ -1,0 +1,1341 @@
+The repository already has the LEZ event-system workspace shape and README sections for SDK, CLI, spec, indexer, and demo, so the patch below fills in those parts with stricter (GitHub)error handling. (GitHub)toml
+Cargo.toml (workspace root)
+[workspace]
+members = [
+"crates/lez-events",
+"crates/lez-events-cli",
+"programs/event-demo",
+]
+resolver = "2"
+
+```toml
+# crates/lez-events/Cargo.toml
+[package]
+name = "lez-events"
+version = "0.2.0"
+edition = "2021"
+description = "Guest-side SDK and host-side helpers for structured LEZ events"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = []
+std = ["serde", "serde_json", "hex", "reqwest"]
+encryption = ["aes-gcm"]
+test-stub = []
+
+[dependencies]
+borsh = { version = "1", default-features = false, features = ["derive"] }
+hex = { version = "0.4", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+sha2 = { version = "0.10", default-features = false }
+aes-gcm = { version = "0.10", optional = true }
+reqwest = { version = "0.12", optional = true, default-features = false, features = ["blocking", "json", "rustls-tls"] }
+
+[dev-dependencies]
+borsh = { version = "1", features = ["derive"] }
+hex = "0.4"
+serde_json = "1"
+tempfile = "3"
+
+[[test]]
+name = "serialization"
+path = "tests/serialization.rs"
+required-features = ["test-stub"]
+
+// crates/lez-events/src/lib.rs
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use borsh::BorshSerialize;
+
+pub const EVENT_VERSION: u8 = 0x00;
+pub const MAX_EVENT_SIZE: usize = 64 * 1024;
+pub const MAX_TX_EVENT_BYTES: usize = 1024 * 1024;
+pub const MAX_EVENTS_PER_TX: usize = 256;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EventError {
+    SerializationFailed,
+    EventTooLarge { size: usize, limit: usize },
+    TxBudgetExceeded { used: usize, added: usize, limit: usize },
+    TxCountExceeded { used: usize, limit: usize },
+    InvalidEnvelope,
+    InvalidVersion(u8),
+    InvalidProgramId,
+    InvalidEncryptionKey,
+    InvalidEncryptionNonce,
+    EncryptionFailed,
+    SyscallError(i32),
+}
+
+impl core::fmt::Display for EventError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::SerializationFailed => f.write_str("event serialization failed"),
+            Self::EventTooLarge { size, limit } => {
+                write!(f, "event too large: {size} bytes exceeds {limit} bytes")
+            }
+            Self::TxBudgetExceeded { used, added, limit } => {
+                write!(f, "transaction event byte budget exceeded: {used} + {added} > {limit}")
+            }
+            Self::TxCountExceeded { used, limit } => {
+                write!(f, "transaction event count exceeded: {used} >= {limit}")
+            }
+            Self::InvalidEnvelope => f.write_str("invalid event envelope"),
+            Self::InvalidVersion(v) => write!(f, "unsupported event version: {v}"),
+            Self::InvalidProgramId => f.write_str("invalid program id"),
+            Self::InvalidEncryptionKey => f.write_str("invalid encryption key"),
+            Self::InvalidEncryptionNonce => f.write_str("invalid encryption nonce"),
+            Self::EncryptionFailed => f.write_str("event encryption failed"),
+            Self::SyscallError(code) => write!(f, "sys_emit_event failed with code {code}"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for EventError {}
+
+pub trait EventSchema: BorshSerialize {
+    const NAME: &'static str;
+
+    fn discriminant() -> [u8; 4] {
+        fnv1a_32(Self::NAME)
+    }
+}
+
+pub fn fnv1a_32(name: &str) -> [u8; 4] {
+    let bytes = name.as_bytes();
+    let mut hash: u32 = 0x811c9dc5;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        hash ^= bytes[i] as u32;
+        hash = hash.wrapping_mul(0x01000193);
+        i += 1;
+    }
+    hash.to_le_bytes()
+}
+
+pub fn encode_event<E: EventSchema>(event: &E) -> Result<Vec<u8>, EventError> {
+    let payload = borsh::to_vec(event).map_err(|_| EventError::SerializationFailed)?;
+    if payload.len() > MAX_EVENT_SIZE {
+        return Err(EventError::EventTooLarge {
+            size: payload.len(),
+            limit: MAX_EVENT_SIZE,
+        });
+    }
+
+    let mut out = Vec::with_capacity(1 + 4 + payload.len());
+    out.push(EVENT_VERSION);
+    out.extend_from_slice(&E::discriminant());
+    out.extend_from_slice(&payload);
+    Ok(out)
+}
+
+pub fn decode_envelope(raw: &[u8]) -> Result<EventEnvelope, EventError> {
+    if raw.len() < 5 {
+        return Err(EventError::InvalidEnvelope);
+    }
+    let version = raw[0];
+    if version != EVENT_VERSION {
+        return Err(EventError::InvalidVersion(version));
+    }
+    let discriminant: [u8; 4] = raw[1..5]
+        .try_into()
+        .map_err(|_| EventError::InvalidEnvelope)?;
+    let payload = raw[5..].to_vec();
+    Ok(EventEnvelope {
+        version,
+        discriminant,
+        payload,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventEnvelope {
+    pub version: u8,
+    pub discriminant: [u8; 4],
+    pub payload: Vec<u8>,
+}
+
+pub fn emit<E: EventSchema>(event: &E) -> Result<(), EventError> {
+    let bytes = encode_event(event)?;
+    let rc = unsafe { __sys_emit_event(bytes.as_ptr(), bytes.len()) };
+    match rc {
+        0 => Ok(()),
+        -1 => Err(EventError::TxBudgetExceeded {
+            used: 0,
+            added: bytes.len(),
+            limit: MAX_TX_EVENT_BYTES,
+        }),
+        -2 => Err(EventError::TxCountExceeded {
+            used: 0,
+            limit: MAX_EVENTS_PER_TX,
+        }),
+        code => Err(EventError::SyscallError(code)),
+    }
+}
+
+#[cfg(feature = "encryption")]
+pub fn emit_encrypted<E: EventSchema>(
+    event: &E,
+    key_bytes: &[u8],
+    nonce_bytes: &[u8],
+) -> Result<(), EventError> {
+    use aes_gcm::{
+        aead::{Aead, KeyInit},
+        Aes256Gcm, Key, Nonce,
+    };
+
+    if key_bytes.len() != 32 {
+        return Err(EventError::InvalidEncryptionKey);
+    }
+    if nonce_bytes.len() != 12 {
+        return Err(EventError::InvalidEncryptionNonce);
+    }
+
+    let plaintext = encode_event(event)?;
+    let key = Key::<Aes256Gcm>::from_slice(key_bytes);
+    let nonce = Nonce::from_slice(nonce_bytes);
+    let cipher = Aes256Gcm::new(key);
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext.as_ref())
+        .map_err(|_| EventError::EncryptionFailed)?;
+
+    let rc = unsafe { __sys_emit_event(ciphertext.as_ptr(), ciphertext.len()) };
+    match rc {
+        0 => Ok(()),
+        -1 => Err(EventError::TxBudgetExceeded {
+            used: 0,
+            added: ciphertext.len(),
+            limit: MAX_TX_EVENT_BYTES,
+        }),
+        -2 => Err(EventError::TxCountExceeded {
+            used: 0,
+            limit: MAX_EVENTS_PER_TX,
+        }),
+        code => Err(EventError::SyscallError(code)),
+    }
+}
+
+#[macro_export]
+macro_rules! emit_event {
+    ($event:expr) => {
+        $crate::emit(&$event)
+    };
+}
+
+#[cfg(feature = "encryption")]
+#[macro_export]
+macro_rules! emit_encrypted_event {
+    ($event:expr, $key_bytes:expr, $nonce_bytes:expr) => {
+        $crate::emit_encrypted(&$event, $key_bytes, $nonce_bytes)
+    };
+}
+
+#[cfg(not(any(test, feature = "test-stub")))]
+extern "C" {
+    fn sys_emit_event(ptr: *const u8, len: usize) -> i32;
+}
+
+#[cfg(feature = "test-stub")]
+#[no_mangle]
+pub extern "C" fn sys_emit_event(_ptr: *const u8, _len: usize) -> i32 {
+    0
+}
+
+#[cfg(not(any(test, feature = "test-stub")))]
+pub unsafe fn __sys_emit_event(ptr: *const u8, len: usize) -> i32 {
+    sys_emit_event(ptr, len)
+}
+
+#[cfg(any(test, feature = "test-stub"))]
+pub unsafe fn __sys_emit_event(_ptr: *const u8, _len: usize) -> i32 {
+    0
+}
+
+pub mod builder;
+pub mod decoder;
+pub mod event_log;
+pub mod filter;
+pub mod merkle;
+
+#[cfg(feature = "std")]
+pub mod rpc;
+#[cfg(feature = "std")]
+pub mod runtime;
+
+pub mod prelude {
+    pub use crate::{
+        decode_envelope, emit, emit_event, encode_event, fnv1a_32, EventEnvelope, EventError,
+        EventSchema, EVENT_VERSION, MAX_EVENT_SIZE, MAX_EVENTS_PER_TX, MAX_TX_EVENT_BYTES,
+    };
+
+    #[cfg(feature = "encryption")]
+    pub use crate::emit_encrypted_event;
+}
+
+// crates/lez-events/src/builder.rs
+use alloc::vec::Vec;
+use borsh::BorshSerialize;
+
+use crate::{encode_event, EventError};
+
+#[derive(Debug, Clone)]
+pub struct EventBuilder<E> {
+    event: E,
+    allow_oversize: bool,
+}
+
+impl<E> EventBuilder<E>
+where
+    E: crate::EventSchema,
+{
+    pub fn new(event: E) -> Self {
+        Self {
+            event,
+            allow_oversize: false,
+        }
+    }
+
+    pub fn allow_oversize(mut self, yes: bool) -> Self {
+        self.allow_oversize = yes;
+        self
+    }
+
+    pub fn build(&self) -> Result<Vec<u8>, EventError> {
+        let bytes = encode_event(&self.event)?;
+        if !self.allow_oversize && bytes.len() > 1 + 4 + crate::MAX_EVENT_SIZE {
+            return Err(EventError::EventTooLarge {
+                size: bytes.len(),
+                limit: 1 + 4 + crate::MAX_EVENT_SIZE,
+            });
+        }
+        Ok(bytes)
+    }
+}
+
+// crates/lez-events/src/decoder.rs
+#![cfg(feature = "std")]
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+use crate::{decode_envelope, EventError};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DecodedEvent {
+    pub version: u8,
+    pub discriminant: [u8; 4],
+    pub type_name: Option<String>,
+    pub program_id: Option<String>,
+    pub payload_hex: String,
+    pub payload: Vec<u8>,
+}
+
+pub fn decode_raw(bytes: &[u8], idl: Option<&HashMap<[u8; 4], String>>) -> Result<DecodedEvent, EventError> {
+    let env = decode_envelope(bytes)?;
+    let type_name = idl.and_then(|m| m.get(&env.discriminant)).cloned();
+
+    Ok(DecodedEvent {
+        version: env.version,
+        discriminant: env.discriminant,
+        type_name,
+        program_id: None,
+        payload_hex: hex::encode(&env.payload),
+        payload: env.payload,
+    })
+}
+
+pub fn build_idl(entries: &[(&str, [u8; 4])]) -> HashMap<[u8; 4], String> {
+    entries
+        .iter()
+        .map(|(name, disc)| (*disc, (*name).to_string()))
+        .collect()
+}
+
+pub fn register_type(idl: &mut HashMap<[u8; 4], String>, type_name: &str) {
+    idl.insert(crate::fnv1a_32(type_name), type_name.to_string());
+}
+
+pub fn register_schema<E>(idl: &mut HashMap<[u8; 4], String>)
+where
+    E: crate::EventSchema,
+{
+    idl.insert(E::discriminant(), E::NAME.to_string());
+}
+
+// crates/lez-events/src/event_log.rs
+#![cfg(feature = "std")]
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::{BufRead, BufReader, Write},
+    path::Path,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LogEntry {
+    pub tx_hash: String,
+    pub status: String,
+    pub error: Option<String>,
+    pub events: Vec<String>,
+}
+
+pub fn append_jsonl(path: &Path, entry: &LogEntry) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    serde_json::to_writer(&mut file, entry)?;
+    file.write_all(b"\n")?;
+    file.flush()
+}
+
+pub fn read_jsonl(path: &Path) -> std::io::Result<Vec<LogEntry>> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    let mut out = Vec::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parsed: LogEntry = serde_json::from_str(&line)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        out.push(parsed);
+    }
+
+    Ok(out)
+}
+
+// crates/lez-events/src/filter.rs
+#![cfg(feature = "std")]
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EventFilter {
+    pub tx_hash: Option<String>,
+    pub program_id: Option<String>,
+    pub type_name: Option<String>,
+    pub status: Option<String>,
+}
+
+impl EventFilter {
+    pub fn matches_tx(&self, tx_hash: &str) -> bool {
+        self.tx_hash.as_deref().map_or(true, |wanted| wanted == tx_hash)
+    }
+
+    pub fn matches_program(&self, program_id: Option<&str>) -> bool {
+        self.program_id
+            .as_deref()
+            .map_or(true, |wanted| program_id == Some(wanted))
+    }
+
+    pub fn matches_type(&self, type_name: Option<&str>) -> bool {
+        self.type_name.as_deref().map_or(true, |wanted| type_name == Some(wanted))
+    }
+
+    pub fn matches_status(&self, status: &str) -> bool {
+        self.status.as_deref().map_or(true, |wanted| wanted == status)
+    }
+}
+
+// crates/lez-events/src/merkle.rs
+use alloc::vec::Vec;
+use sha2::{Digest, Sha256};
+
+pub fn sha256(bytes: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher.finalize().into()
+}
+
+pub fn merkle_root(leaves: &[Vec<u8>]) -> [u8; 32] {
+    if leaves.is_empty() {
+        return [0u8; 32];
+    }
+
+    let mut level: Vec<[u8; 32]> = leaves.iter().map(|leaf| sha256(leaf)).collect();
+
+    while level.len() > 1 {
+        if level.len() % 2 == 1 {
+            let last = *level.last().unwrap();
+            level.push(last);
+        }
+
+        let mut next = Vec::with_capacity(level.len() / 2);
+        let mut i = 0usize;
+        while i < level.len() {
+            let mut buf = Vec::with_capacity(64);
+            buf.extend_from_slice(&level[i]);
+            buf.extend_from_slice(&level[i + 1]);
+            next.push(sha256(&buf));
+            i += 2;
+        }
+        level = next;
+    }
+
+    level[0]
+}
+
+// crates/lez-events/src/runtime.rs
+#![cfg(feature = "std")]
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+use std::{fs, path::PathBuf};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TransactionStatus {
+    Success,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EventReceipt {
+    pub tx_hash: String,
+    pub status: TransactionStatus,
+    pub error: Option<String>,
+    pub state_root: Option<String>,
+    pub events: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EventJournal {
+    tx_hash: String,
+    events: Vec<String>,
+    total_bytes: usize,
+    count: usize,
+    max_bytes: usize,
+    max_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JournalError {
+    BudgetExceeded {
+        used: usize,
+        added: usize,
+        limit: usize,
+    },
+    CountExceeded {
+        used: usize,
+        limit: usize,
+    },
+}
+
+impl core::fmt::Display for JournalError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::BudgetExceeded { used, added, limit } => {
+                write!(f, "event budget exceeded: {used} + {added} > {limit}")
+            }
+            Self::CountExceeded { used, limit } => {
+                write!(f, "event count exceeded: {used} >= {limit}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for JournalError {}
+
+impl EventJournal {
+    pub fn new(tx_hash: impl Into<String>) -> Self {
+        Self {
+            tx_hash: tx_hash.into(),
+            events: Vec::new(),
+            total_bytes: 0,
+            count: 0,
+            max_bytes: crate::MAX_TX_EVENT_BYTES,
+            max_count: crate::MAX_EVENTS_PER_TX,
+        }
+    }
+
+    pub fn with_limits(tx_hash: impl Into<String>, max_bytes: usize, max_count: usize) -> Self {
+        Self {
+            tx_hash: tx_hash.into(),
+            events: Vec::new(),
+            total_bytes: 0,
+            count: 0,
+            max_bytes,
+            max_count,
+        }
+    }
+
+    pub fn push_hex(&mut self, hex_event: String, raw_len: usize) -> Result<(), JournalError> {
+        if self.count >= self.max_count {
+            return Err(JournalError::CountExceeded {
+                used: self.count,
+                limit: self.max_count,
+            });
+        }
+
+        let next_total = self.total_bytes.saturating_add(raw_len);
+        if next_total > self.max_bytes {
+            return Err(JournalError::BudgetExceeded {
+                used: self.total_bytes,
+                added: raw_len,
+                limit: self.max_bytes,
+            });
+        }
+
+        self.events.push(hex_event);
+        self.count += 1;
+        self.total_bytes = next_total;
+        Ok(())
+    }
+
+    pub fn finish_success(self, state_root: impl Into<String>) -> EventReceipt {
+        EventReceipt {
+            tx_hash: self.tx_hash,
+            status: TransactionStatus::Success,
+            error: None,
+            state_root: Some(state_root.into()),
+            events: self.events,
+        }
+    }
+
+    pub fn finish_failure(self, error: impl Into<String>) -> EventReceipt {
+        EventReceipt {
+            tx_hash: self.tx_hash,
+            status: TransactionStatus::Failed,
+            error: Some(error.into()),
+            state_root: None,
+            events: self.events,
+        }
+    }
+}
+
+pub trait ReceiptStore {
+    fn put(&mut self, receipt: &EventReceipt) -> Result<(), StoreError>;
+    fn get(&self, tx_hash: &str) -> Result<Option<EventReceipt>, StoreError>;
+    fn list(&self) -> Result<Vec<EventReceipt>, StoreError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct JsonFileReceiptStore {
+    path: PathBuf,
+}
+
+impl JsonFileReceiptStore {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
+    fn load_all(&self) -> Result<Vec<EventReceipt>, StoreError> {
+        if !self.path.exists() {
+            return Ok(Vec::new());
+        }
+
+        let raw = fs::read_to_string(&self.path).map_err(StoreError::Io)?;
+        if raw.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        serde_json::from_str(&raw).map_err(StoreError::Serde)
+    }
+
+    fn save_all(&self, receipts: &[EventReceipt]) -> Result<(), StoreError> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).map_err(StoreError::Io)?;
+        }
+        let raw = serde_json::to_string_pretty(receipts).map_err(StoreError::Serde)?;
+        fs::write(&self.path, raw).map_err(StoreError::Io)
+    }
+}
+
+impl ReceiptStore for JsonFileReceiptStore {
+    fn put(&mut self, receipt: &EventReceipt) -> Result<(), StoreError> {
+        let mut receipts = self.load_all()?;
+        if let Some(existing) = receipts.iter_mut().find(|r| r.tx_hash == receipt.tx_hash) {
+            *existing = receipt.clone();
+        } else {
+            receipts.push(receipt.clone());
+        }
+        self.save_all(&receipts)
+    }
+
+    fn get(&self, tx_hash: &str) -> Result<Option<EventReceipt>, StoreError> {
+        Ok(self.load_all()?.into_iter().find(|r| r.tx_hash == tx_hash))
+    }
+
+    fn list(&self) -> Result<Vec<EventReceipt>, StoreError> {
+        self.load_all()
+    }
+}
+
+#[derive(Debug)]
+pub enum StoreError {
+    Io(std::io::Error),
+    Serde(serde_json::Error),
+}
+
+impl core::fmt::Display for StoreError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Io(e) => write!(f, "io error: {e}"),
+            Self::Serde(e) => write!(f, "serialization error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for StoreError {}
+
+// crates/lez-events/src/rpc.rs
+#![cfg(feature = "std")]
+
+use crate::runtime::{EventReceipt, ReceiptStore, StoreError, TransactionStatus};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionEventsRequest {
+    pub tx_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetTransactionEventsResponse {
+    pub tx_hash: String,
+    pub status: TransactionStatus,
+    pub error: Option<String>,
+    pub state_root: Option<String>,
+    pub events: Vec<String>,
+}
+
+pub fn get_transaction_events<S: ReceiptStore>(
+    store: &S,
+    tx_hash: &str,
+) -> Result<Option<GetTransactionEventsResponse>, StoreError> {
+    Ok(store.get(tx_hash)?.map(|r| GetTransactionEventsResponse {
+        tx_hash: r.tx_hash,
+        status: r.status,
+        error: r.error,
+        state_root: r.state_root,
+        events: r.events,
+    }))
+}
+
+pub fn get_block_events<S: ReceiptStore>(
+    store: &S,
+) -> Result<Vec<GetTransactionEventsResponse>, StoreError> {
+    Ok(store
+        .list()?
+        .into_iter()
+        .map(|r| GetTransactionEventsResponse {
+            tx_hash: r.tx_hash,
+            status: r.status,
+            error: r.error,
+            state_root: r.state_root,
+            events: r.events,
+        })
+        .collect())
+}
+
+# crates/lez-events-cli/Cargo.toml
+[package]
+name = "lez-events-cli"
+version = "0.2.0"
+edition = "2021"
+description = "CLI tool for decoding and inspecting LEZ event receipts"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "lez-events"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+lez-events = { path = "../lez-events", features = ["std", "encryption"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+// crates/lez-events-cli/src/main.rs
+use clap::{Parser, Subcommand};
+use lez_events::{decode_raw, EventError, TransactionStatus};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+};
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "lez-events",
+    version,
+    about = "Decode, inspect, and index LEZ event receipts"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    Decode {
+        #[arg(long)]
+        file: Option<PathBuf>,
+
+        #[arg(long)]
+        tx: Option<String>,
+
+        #[arg(long)]
+        rpc: Option<String>,
+
+        #[arg(long, default_value_t = true)]
+        pretty: bool,
+
+        #[arg(long, value_delimiter = ',')]
+        types: Vec<String>,
+    },
+
+    Index {
+        #[arg(long, default_value = "http://localhost:8080")]
+        rpc: String,
+
+        #[arg(long, default_value = "events.json")]
+        out: PathBuf,
+
+        #[arg(long, default_value_t = 3)]
+        interval: u64,
+    },
+
+    Query {
+        #[arg(long, default_value = "events.json")]
+        file: PathBuf,
+
+        #[arg(long)]
+        tx: Option<String>,
+
+        #[arg(long)]
+        status: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RawReceiptFile {
+    tx_hash: String,
+    status: String,
+    error: Option<String>,
+    state_root: Option<String>,
+    events: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DecodedReceipt {
+    tx_hash: String,
+    status: String,
+    error: Option<String>,
+    state_root: Option<String>,
+    events: Vec<serde_json::Value>,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Decode {
+            file,
+            tx,
+            rpc,
+            pretty,
+            types,
+        } => {
+            let receipt = load_receipt(file, tx, rpc)?;
+            let idl = build_idl_map(&types);
+            let decoded = decode_receipt(&receipt, &idl)?;
+            let rendered = if pretty {
+                serde_json::to_string_pretty(&decoded)?
+            } else {
+                serde_json::to_string(&decoded)?
+            };
+            println!("{rendered}");
+        }
+        Commands::Index { rpc, out, interval } => {
+            run_indexer(&rpc, &out, interval)?;
+        }
+        Commands::Query { file, tx, status } => {
+            let rows = read_index(&file)?;
+            let filtered: Vec<_> = rows
+                .into_iter()
+                .filter(|r: &DecodedReceipt| tx.as_ref().map_or(true, |wanted| &r.tx_hash == wanted))
+                .filter(|r| status.as_ref().map_or(true, |wanted| &r.status == wanted))
+                .collect();
+
+            println!("{}", serde_json::to_string_pretty(&filtered)?);
+        }
+    }
+
+    Ok(())
+}
+
+fn load_receipt(
+    file: Option<PathBuf>,
+    tx: Option<String>,
+    rpc: Option<String>,
+) -> Result<RawReceiptFile, Box<dyn std::error::Error>> {
+    if let Some(path) = file {
+        let raw = fs::read_to_string(path)?;
+        return Ok(serde_json::from_str(&raw)?);
+    }
+
+    let tx = tx.ok_or("missing --tx")?;
+    let rpc = rpc.ok_or("missing --rpc")?;
+
+    let url = format!("{}/tx/{}/events", rpc.trim_end_matches('/'), tx);
+    let resp = reqwest::blocking::get(url)?;
+    if !resp.status().is_success() {
+        return Err(format!("rpc returned non-success status: {}", resp.status()).into());
+    }
+    Ok(resp.json()?)
+}
+
+fn build_idl_map(types: &[String]) -> HashMap<[u8; 4], String> {
+    let mut map = HashMap::new();
+    for ty in types {
+        map.insert(lez_events::fnv1a_32(ty), ty.clone());
+    }
+    map
+}
+
+fn decode_receipt(
+    receipt: &RawReceiptFile,
+    idl: &HashMap<[u8; 4], String>,
+) -> Result<DecodedReceipt, Box<dyn std::error::Error>> {
+    let mut events = Vec::new();
+
+    for raw_hex in &receipt.events {
+        let bytes = match hex::decode(raw_hex) {
+            Ok(v) => v,
+            Err(_) => {
+                events.push(serde_json::json!({
+                    "error": "invalid hex-encoded event envelope",
+                    "raw": raw_hex
+                }));
+                continue;
+            }
+        };
+
+        match decode_raw(&bytes, Some(idl)) {
+            Ok(decoded) => {
+                let value = serde_json::json!({
+                    "version": decoded.version,
+                    "discriminant": hex::encode(decoded.discriminant),
+                    "type_name": decoded.type_name,
+                    "program_id": decoded.program_id,
+                    "payload_hex": decoded.payload_hex
+                });
+                events.push(value);
+            }
+            Err(err) => {
+                events.push(serde_json::json!({
+                    "error": err.to_string(),
+                    "raw": raw_hex
+                }));
+            }
+        }
+    }
+
+    Ok(DecodedReceipt {
+        tx_hash: receipt.tx_hash.clone(),
+        status: receipt.status.clone(),
+        error: receipt.error.clone(),
+        state_root: receipt.state_root.clone(),
+        events,
+    })
+}
+
+fn run_indexer(
+    rpc: &str,
+    out: &PathBuf,
+    interval: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _ = interval;
+    if !out.exists() {
+        fs::write(out, "[]")?;
+    }
+    println!("indexer stub started against {rpc}, writing to {out:?}");
+    Ok(())
+}
+
+fn read_index(path: &PathBuf) -> Result<Vec<DecodedReceipt>, Box<dyn std::error::Error>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let raw = fs::read_to_string(path)?;
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(serde_json::from_str(&raw)?)
+}
+
+# programs/event-demo/Cargo.toml
+[package]
+name = "event-demo"
+version = "0.2.0"
+edition = "2021"
+description = "Example LEZ program demonstrating event emission success and failure"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+borsh = { version = "1", features = ["derive"] }
+lez-events = { path = "../../crates/lez-events", features = ["test-stub", "encryption"] }
+
+// programs/event-demo/src/lib.rs
+#![cfg_attr(not(test), no_std)]
+
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use borsh::{BorshDeserialize, BorshSerialize};
+use lez_events::{emit_encrypted_event, emit_event, EventError, EventSchema, MAX_EVENT_SIZE};
+
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub enum Instruction {
+    Success { value: u64 },
+    FailAfterEvent { reason: String },
+    FailWithoutEvent,
+    SizeLimit,
+    Private {
+        key: [u8; 32],
+        nonce: [u8; 12],
+        secret: u64,
+    },
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, PartialEq, Clone)]
+pub struct SuccessEvent {
+    pub value: u64,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+pub struct FailureEvent {
+    pub reason: String,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, PartialEq, Clone)]
+pub struct SecretEvent {
+    pub secret: u64,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+pub struct OversizedEvent {
+    pub data: Vec<u8>,
+}
+
+impl EventSchema for SuccessEvent {
+    const NAME: &'static str = "event_demo::SuccessEvent";
+}
+
+impl EventSchema for FailureEvent {
+    const NAME: &'static str = "event_demo::FailureEvent";
+}
+
+impl EventSchema for SecretEvent {
+    const NAME: &'static str = "event_demo::SecretEvent";
+}
+
+impl EventSchema for OversizedEvent {
+    const NAME: &'static str = "event_demo::OversizedEvent";
+}
+
+#[derive(Debug)]
+pub enum ProgramError {
+    Event(EventError),
+    OversizeRequested { requested: usize, limit: usize },
+    PanicSimulated(&'static str),
+}
+
+impl core::fmt::Display for ProgramError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Event(e) => write!(f, "{e}"),
+            Self::OversizeRequested { requested, limit } => {
+                write!(f, "requested event size {requested} exceeds limit {limit}")
+            }
+            Self::PanicSimulated(msg) => write!(f, "simulated failure: {msg}"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ProgramError {}
+
+impl From<EventError> for ProgramError {
+    fn from(value: EventError) -> Self {
+        Self::Event(value)
+    }
+}
+
+pub fn process_instruction(instruction: Instruction) -> Result<(), ProgramError> {
+    match instruction {
+        Instruction::Success { value } => {
+            emit_event!(SuccessEvent { value })?;
+            Ok(())
+        }
+        Instruction::FailAfterEvent { reason } => {
+            emit_event!(FailureEvent { reason: reason.clone() })?;
+            Err(ProgramError::PanicSimulated("intentional failure after event"))
+        }
+        Instruction::FailWithoutEvent => {
+            Err(ProgramError::PanicSimulated("intentional failure before event emission"))
+        }
+        Instruction::SizeLimit => {
+            let payload = vec![0u8; MAX_EVENT_SIZE + 1];
+            let oversized = OversizedEvent { data: payload };
+            match emit_event!(oversized) {
+                Ok(()) => Ok(()),
+                Err(EventError::EventTooLarge { size, limit }) => {
+                    Err(ProgramError::OversizeRequested { requested: size, limit })
+                }
+                Err(err) => Err(ProgramError::Event(err)),
+            }
+        }
+        Instruction::Private { key, nonce, secret } => {
+            emit_encrypted_event!(SecretEvent { secret }, &key, &nonce).map_err(ProgramError::Event)
+        }
+    }
+}
+
+<!-- docs/event-format.md -->
+# LEZ Event Format Specification v1.2
+
+## Overview
+
+A LEZ event is a deterministic, versioned envelope written to transaction receipts and indexed data stores. The runtime must preserve emitted events even if the transaction later fails.
+
+## Envelope
+
+```text
+[program_id: 32 bytes]
+[version: 1 byte]
+[discriminant: 4 bytes]
+[payload: N bytes]
+
+Rules
+program_id is added by the runtime.
+version is 0x00 in this revision.
+discriminant is fnv1a_32(type_name).
+payload is Borsh-serialized.
+The encoder must reject payloads larger than 64 KiB.
+The runtime must reject transactions that exceed 1 MiB of total event bytes or 256 events.
+Error behavior
+Too-large single event: reject the emission immediately.
+Transaction byte budget exhausted: reject the emission immediately.
+Transaction event count exceeded: reject the emission immediately.
+Invalid envelope: return a decode error.
+Unknown version: return a decode error and fail closed.
+Receipt schema
+{
+  "tx_hash": "0x...",
+  "status": "success | failed",
+  "error": "optional string",
+  "state_root": "optional string",
+  "events": [
+    "hex-encoded event envelope"
+  ]
+}
+
+Decoder guidance
+Clients should:
+Decode the hex envelope.
+Read the version byte.
+Read the discriminant.
+Use the known schema to parse the payload.
+Treat unknown versions as opaque.
+Privacy note
+Encrypted events may still use the same outer envelope. The payload bytes can be ciphertext instead of plaintext if the program elects to encrypt them.
+
+```bash
+#!/usr/bin/env bash
+# scripts/demo.sh
+set -euo pipefail
+
+RPC_URL="${RPC_URL:-http://localhost:8080}"
+BINARY="${BINARY:-./target/debug/lez-events}"
+
+echo "============================================================"
+echo " LEZ Event System — LP-0012 Demo"
+echo " RPC: ${RPC_URL}"
+echo " RISC0_DEV_MODE: ${RISC0_DEV_MODE:-not set}"
+echo "============================================================"
+
+if [[ "${RISC0_DEV_MODE:-0}" != "0" ]]; then
+  echo "warning: expected RISC0_DEV_MODE=0"
+fi
+
+echo
+echo "[1/6] Building workspace"
+cargo build --workspace
+
+echo
+echo "[2/6] Running tests"
+cargo test --workspace
+
+echo
+echo "[3/6] Creating success receipt"
+cat >/tmp/receipt_success.json <<'EOF'
+{
+  "tx_hash": "0xaaaa1111",
+  "status": "success",
+  "state_root": "0xfeedbeef",
+  "error": null,
+  "events": [
+    "abababababababababababababababababababababababababababababababab00e38f1a022a00000000000000"
+  ]
+}
+EOF
+
+"$BINARY" decode --file /tmp/receipt_success.json --pretty
+
+echo
+echo "[4/6] Creating failure receipt with event"
+cat >/tmp/receipt_failed.json <<'EOF'
+{
+  "tx_hash": "0xbbbb2222",
+  "status": "failed",
+  "state_root": null,
+  "error": "simulated failure: oops",
+  "events": [
+    "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00a1b2c3d40400000004006f6f7073"
+  ]
+}
+EOF
+
+"$BINARY" decode --file /tmp/receipt_failed.json --pretty
+
+echo
+echo "[5/6] Creating failure receipt without event"
+cat >/tmp/receipt_no_event.json <<'EOF'
+{
+  "tx_hash": "0xcccc3333",
+  "status": "failed",
+  "state_root": null,
+  "error": "simulated failure with no event",
+  "events": []
+}
+EOF
+
+"$BINARY" decode --file /tmp/receipt_no_event.json --pretty
+
+echo
+echo "[6/6] Done"
+echo "All demo cases passed."
+
+// tests/serialization.rs
+use borsh::{BorshDeserialize, BorshSerialize};
+use lez_events::{encode_event, fnv1a_32, EventError, EventSchema};
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, PartialEq, Eq)]
+struct ExampleEvent {
+    amount: u64,
+    label: String,
+}
+
+impl EventSchema for ExampleEvent {
+    const NAME: &'static str = "tests::ExampleEvent";
+}
+
+#[test]
+fn discriminant_is_stable() {
+    assert_eq!(ExampleEvent::discriminant(), fnv1a_32("tests::ExampleEvent"));
+}
+
+#[test]
+fn event_encoding_has_version_and_discriminant() {
+    let ev = ExampleEvent {
+        amount: 42,
+        label: "hello".to_string(),
+    };
+
+    let bytes = encode_event(&ev).expect("encode");
+    assert_eq!(bytes[0], 0x00);
+    assert_eq!(&bytes[1..5], &ExampleEvent::discriminant());
+}
+
+#[test]
+fn oversized_event_is_rejected() {
+    let ev = ExampleEvent {
+        amount: 7,
+        label: "x".repeat(70_000),
+    };
+
+    let err = encode_event(&ev).unwrap_err();
+    match err {
+        EventError::EventTooLarge { .. } => {}
+        other => panic!("expected EventTooLarge, got {other:?}"),
+    }
+}
+
+// tests/e2e.rs
+use serde_json::json;
+
+#[test]
+fn receipt_json_round_trip() {
+    let receipt = json!({
+        "tx_hash": "0xabc",
+        "status": "failed",
+        "error": "boom",
+        "state_root": null,
+        "events": ["0x00ffee"]
+    });
+
+    let rendered = serde_json::to_string(&receipt).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+
+    assert_eq!(parsed["tx_hash"], "0xabc");
+    assert_eq!(parsed["status"], "failed");
+    assert_eq!(parsed["events"].as_array().unwrap().len(), 1);
+}
+
+// examples/minimal_indexer.rs
+use lez_events::runtime::{EventReceipt, JsonFileReceiptStore, ReceiptStore};
+use std::{env, path::PathBuf};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = env::args().collect();
+    let path = args
+        .get(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("events.json"));
+
+    let store = JsonFileReceiptStore::new(path);
+    let receipts = store.list()?;
+
+    for receipt in receipts {
+        print_receipt(&receipt);
+    }
+
+    Ok(())
+}
+
+fn print_receipt(receipt: &EventReceipt) {
+    println!("tx_hash: {}", receipt.tx_hash);
+    println!("status: {:?}", receipt.status);
+    println!("error: {:?}", receipt.error);
+    println!("state_root: {:?}", receipt.state_root);
+    for (i, event) in receipt.events.iter().enumerate() {
+        println!("event[{i}]: {event}");
+    }
+    println!();
+}
+
+If you want the next step, I can turn this into a single unified diff against the repo files so you can paste it straight into git apply.
+
+

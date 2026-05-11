@@ -1,0 +1,2615 @@
+Below is a detailed Rust patch set for Cryptarchia / Local Leadership Lottery. It is written as a self-contained module family you can drop into the repo and wire into the existing consensus path. The code focuses on hidden proposer identity, local win detection, rotating epoch keys, stake-weighted thresholds, proposal commitments, and proof verification.
+Cargo.toml
+[workspace]
+members = [
+  "crates/cryptarchia-lll",
+  "crates/cryptarchia-lll-cli",
+]
+
+resolver = "2"
+
+crates/cryptarchia-lll/Cargo.toml
+[package]
+name = "cryptarchia-lll"
+version = "0.1.0"
+edition = "2021"
+description = "Cryptarchia local leadership lottery with hidden proposer identity"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["std"]
+std = ["serde", "serde_json", "hex", "chrono", "rand/std"]
+test-stub = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+hex = { version = "0.4", optional = true }
+thiserror = "2"
+rand = { version = "0.8", features = ["std_rng"] }
+rand_chacha = "0.3"
+sha2 = "0.10"
+blake3 = "1"
+hmac = "0.12"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"], optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+hex = "0.4"
+
+crates/cryptarchia-lll/src/lib.rs
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+pub mod beacon;
+pub mod crypto;
+pub mod error;
+pub mod lottery;
+pub mod policy;
+pub mod proof;
+pub mod schedule;
+pub mod stake;
+pub mod state;
+pub mod telemetry;
+pub mod types;
+pub mod utils;
+
+pub use beacon::{BeaconMix, EpochBeacon, SlotSeed};
+pub use crypto::{
+    commitment_hex, derive_alias, derive_epoch_keypair, derive_ticket, hash32, hash64,
+    random_node_secret, ticket_below_threshold, NodeSecret,
+};
+pub use error::{LllError, LllResult};
+pub use lottery::{
+    LocalLeadershipLottery, LeadershipOutcome, LotteryConfig, LotteryTicket, ProposalAnnounce,
+    ProposalEnvelope,
+};
+pub use policy::{
+    CommitteePolicy, ProposalPolicy, ProposalPolicyDecision, ProposalVisibilityPolicy,
+};
+pub use proof::{
+    build_leadership_proof, verify_leadership_proof, LeadershipProof, LeadershipProofHeader,
+    LeadershipPublicInputs,
+};
+pub use schedule::{EpochSchedule, SlotIndex};
+pub use stake::{
+    effective_leader_threshold, stake_probability_ppm, StakeAccount, StakeTable, ValidatorRecord,
+    ValidatorRoot,
+};
+pub use state::{LeadershipState, ProposalHistory, ProposalState};
+pub use telemetry::{AuditEvent, AuditLevel, LotteryMetrics, LotteryTrace};
+pub use types::{
+    ChainId, EpochId, LeaderAlias, LeaderCommitment, LeaderIdentityHint, NodePublicKey,
+    ProposalId, Slot, StakeWeight, WinnerStatus,
+};
+pub use utils::{
+    bounded_u64, format_ppm, redact_hex, rolling_mix, stable_ratio_u128, support_preview,
+};
+
+pub const LLL_VERSION: u8 = 1;
+pub const MAX_PROPOSAL_BYTES: usize = 1_048_576;
+pub const MAX_PROPOSAL_HISTORY: usize = 10_000;
+pub const MAX_AUDIT_EVENTS: usize = 50_000;
+
+#[cfg(feature = "std")]
+pub fn to_json_string<T: Serialize>(value: &T) -> Result<String, LllError> {
+    serde_json::to_string_pretty(value).map_err(|e| LllError::Serialization(e.to_string()))
+}
+
+#[cfg(feature = "std")]
+pub fn from_json_str<T: for<'de> Deserialize<'de>>(raw: &str) -> Result<T, LllError> {
+    serde_json::from_str(raw).map_err(|e| LllError::Serialization(e.to_string()))
+}
+
+crates/cryptarchia-lll/src/error.rs
+use alloc::string::String;
+
+pub type LllResult<T> = core::result::Result<T, LllError>;
+
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
+pub enum LllError {
+    #[error("serialization failed: {0}")]
+    Serialization(String),
+
+    #[error("invalid epoch id")]
+    InvalidEpoch,
+
+    #[error("invalid slot")]
+    InvalidSlot,
+
+    #[error("invalid chain id")]
+    InvalidChainId,
+
+    #[error("invalid stake table")]
+    InvalidStakeTable,
+
+    #[error("no validators available")]
+    NoValidators,
+
+    #[error("stake total is zero")]
+    ZeroTotalStake,
+
+    #[error("proposal exceeded byte budget: {size} > {limit}")]
+    ProposalTooLarge { size: usize, limit: usize },
+
+    #[error("ticket generation failed")]
+    TicketGenerationFailed,
+
+    #[error("winning threshold invalid")]
+    InvalidThreshold,
+
+    #[error("proposal policy denied: {0}")]
+    ProposalDenied(String),
+
+    #[error("proof verification failed: {0}")]
+    ProofVerificationFailed(String),
+
+    #[error("commitment mismatch")]
+    CommitmentMismatch,
+
+    #[error("nullifier collision")]
+    NullifierCollision,
+
+    #[error("duplicate proposal")]
+    DuplicateProposal,
+
+    #[error("unknown proposer")]
+    UnknownProposer,
+
+    #[error("bad epoch beacon")]
+    BadBeacon,
+
+    #[error("unsupported version")]
+    UnsupportedVersion,
+
+    #[error("telemetry capacity exceeded")]
+    TelemetryCapacityExceeded,
+
+    #[error("io error: {0}")]
+    Io(String),
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for LllError {}
+
+crates/cryptarchia-lll/src/types.rs
+use alloc::string::String;
+use serde::{Deserialize, Serialize};
+
+pub type ChainId = u64;
+pub type EpochId = u64;
+pub type Slot = u64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct StakeWeight {
+    pub raw: u128,
+    pub effective: u128,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodePublicKey(pub [u8; 32]);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LeaderAlias(pub [u8; 32]);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LeaderCommitment(pub [u8; 32]);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LeaderIdentityHint(pub [u8; 32]);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProposalId(pub [u8; 32]);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WinnerStatus {
+    Winner,
+    NotWinner,
+    Unknown,
+}
+
+impl WinnerStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Winner => "winner",
+            Self::NotWinner => "not-winner",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+crates/cryptarchia-lll/src/utils.rs
+use alloc::string::{String, ToString};
+
+pub fn bounded_u64(value: u64, min: u64, max: u64) -> u64 {
+    if value < min {
+        min
+    } else if value > max {
+        max
+    } else {
+        value
+    }
+}
+
+pub fn rolling_mix(seed: &[u8], counter: u64, domain: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(domain);
+    hasher.update(seed);
+    hasher.update(counter.to_le_bytes());
+    hasher.finalize().into()
+}
+
+pub fn stable_ratio_u128(numerator: u128, denominator: u128) -> u128 {
+    if denominator == 0 {
+        return 0;
+    }
+    numerator.saturating_mul(u128::MAX / denominator)
+}
+
+pub fn format_ppm(ppm: u64) -> String {
+    let whole = ppm / 1_000_000;
+    let rem = ppm % 1_000_000;
+    format!("{whole}.{rem:06}")
+}
+
+pub fn redact_hex(value: &str, keep: usize) -> String {
+    let s = value.trim().trim_start_matches("0x");
+    if s.len() <= keep {
+        s.to_string()
+    } else {
+        format!("{}…", &s[..keep.min(s.len())])
+    }
+}
+
+pub fn support_preview(label: &str, data: &[u8]) -> String {
+    let head = if data.len() >= 8 {
+        hex::encode(&data[..8])
+    } else {
+        hex::encode(data)
+    };
+    format!("{label}: len={} head={head}", data.len())
+}
+
+crates/cryptarchia-lll/src/crypto.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use base64::{engine::general_purpose, Engine as _};
+use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
+use hmac::{Hmac, Mac};
+use rand::{rngs::OsRng, RngCore};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256, Sha512};
+
+use crate::{types::*, LllError, LllResult};
+
+type HmacSha512 = Hmac<Sha512>;
+
+#[derive(Debug, Clone)]
+pub struct NodeSecret {
+    pub secret: [u8; 32],
+}
+
+impl NodeSecret {
+    pub fn random() -> Self {
+        let mut secret = [0u8; 32];
+        OsRng.fill_bytes(&mut secret);
+        Self { secret }
+    }
+
+    pub fn from_bytes(secret: [u8; 32]) -> Self {
+        Self { secret }
+    }
+
+    pub fn signing_key(&self, epoch_seed: &[u8; 32]) -> SigningKey {
+        let mut hasher = blake3::Hasher::new_keyed(&self.secret);
+        hasher.update(epoch_seed);
+        hasher.update(b"cryptarchia/epoch-key");
+        let digest = hasher.finalize();
+        let mut seed = [0u8; 32];
+        seed.copy_from_slice(digest.as_bytes());
+        SigningKey::from_bytes(&seed)
+    }
+
+    pub fn public_key(&self, epoch_seed: &[u8; 32]) -> NodePublicKey {
+        let signing_key = self.signing_key(epoch_seed);
+        NodePublicKey(signing_key.verifying_key().to_bytes())
+    }
+
+    pub fn alias(&self, chain_id: ChainId, epoch_id: EpochId, epoch_seed: &[u8; 32]) -> LeaderAlias {
+        derive_alias(chain_id, epoch_id, epoch_seed, &self.secret)
+    }
+}
+
+pub fn random_node_secret() -> NodeSecret {
+    NodeSecret::random()
+}
+
+pub fn hash32(data: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hasher.finalize().into()
+}
+
+pub fn hash64(data: &[u8]) -> [u8; 64] {
+    let mut hasher = Sha512::new();
+    hasher.update(data);
+    hasher.finalize().into()
+}
+
+pub fn commitment_hex(label: &str, bytes: &[u8]) -> String {
+    let mut h = Sha256::new();
+    h.update(label.as_bytes());
+    h.update(bytes);
+    hex::encode(h.finalize())
+}
+
+pub fn derive_alias(
+    chain_id: ChainId,
+    epoch_id: EpochId,
+    epoch_seed: &[u8; 32],
+    node_secret: &[u8; 32],
+) -> LeaderAlias {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"cryptarchia/alias");
+    hasher.update(chain_id.to_le_bytes().as_ref());
+    hasher.update(epoch_id.to_le_bytes().as_ref());
+    hasher.update(epoch_seed);
+    hasher.update(node_secret);
+    let digest = hasher.finalize();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(digest.as_bytes());
+    LeaderAlias(out)
+}
+
+pub fn derive_epoch_keypair(secret: &NodeSecret, epoch_seed: &[u8; 32]) -> SigningKey {
+    secret.signing_key(epoch_seed)
+}
+
+fn hmac_ticket_key(node_secret: &[u8; 32], chain_id: ChainId, epoch_id: EpochId) -> [u8; 64] {
+    let mut mac = HmacSha512::new_from_slice(node_secret).expect("HMAC key length valid");
+    mac.update(b"cryptarchia/ticket-key");
+    mac.update(&chain_id.to_le_bytes());
+    mac.update(&epoch_id.to_le_bytes());
+    let bytes = mac.finalize().into_bytes();
+    let mut out = [0u8; 64];
+    out.copy_from_slice(&bytes);
+    out
+}
+
+pub fn derive_ticket(
+    node_secret: &NodeSecret,
+    chain_id: ChainId,
+    epoch_id: EpochId,
+    slot: Slot,
+    beacon_seed: &[u8; 32],
+    stake: u128,
+    total_stake: u128,
+    validator_root: &[u8; 32],
+) -> [u8; 32] {
+    let key = hmac_ticket_key(&node_secret.secret, chain_id, epoch_id);
+    let mut mac = HmacSha512::new_from_slice(&key).expect("HMAC key length valid");
+    mac.update(b"cryptarchia/lottery-ticket");
+    mac.update(&chain_id.to_le_bytes());
+    mac.update(&epoch_id.to_le_bytes());
+    mac.update(&slot.to_le_bytes());
+    mac.update(beacon_seed);
+    mac.update(&stake.to_le_bytes());
+    mac.update(&total_stake.to_le_bytes());
+    mac.update(validator_root);
+    let bytes = mac.finalize().into_bytes();
+
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&bytes[..32]);
+    out
+}
+
+pub fn ticket_below_threshold(ticket: &[u8; 32], threshold: u128) -> bool {
+    let mut first16 = [0u8; 16];
+    first16.copy_from_slice(&ticket[..16]);
+    let ticket_value = u128::from_le_bytes(first16);
+    ticket_value <= threshold
+}
+
+pub fn sign_challenge(
+    node_secret: &NodeSecret,
+    epoch_seed: &[u8; 32],
+    challenge: &[u8],
+) -> (NodePublicKey, Vec<u8>) {
+    let signing_key = node_secret.signing_key(epoch_seed);
+    let public_key = signing_key.verifying_key();
+    let signature = signing_key.sign(challenge);
+    (NodePublicKey(public_key.to_bytes()), signature.to_bytes().to_vec())
+}
+
+pub fn verify_signature(public_key: &NodePublicKey, challenge: &[u8], signature: &[u8]) -> bool {
+    let vk = match VerifyingKey::from_bytes(&public_key.0) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let sig = match ed25519_dalek::Signature::try_from(signature) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    vk.verify_strict(challenge, &sig).is_ok()
+}
+
+crates/cryptarchia-lll/src/beacon.rs
+use serde::{Deserialize, Serialize};
+
+use crate::{crypto::hash32, Slot};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EpochBeacon {
+    pub chain_id: u64,
+    pub epoch_id: u64,
+    pub seed: [u8; 32],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotSeed {
+    pub slot: Slot,
+    pub seed: [u8; 32],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BeaconMix {
+    pub previous: [u8; 32],
+    pub heartbeat: [u8; 32],
+    pub committee_root: [u8; 32],
+}
+
+impl EpochBeacon {
+    pub fn slot_seed(&self, slot: Slot) -> SlotSeed {
+        let mut data = Vec::new();
+        data.extend_from_slice(&self.seed);
+        data.extend_from_slice(&slot.to_le_bytes());
+        data.extend_from_slice(b"cryptarchia/slot-seed");
+        SlotSeed {
+            slot,
+            seed: hash32(&data),
+        }
+    }
+}
+
+impl BeaconMix {
+    pub fn mix(&self) -> [u8; 32] {
+        let mut data = Vec::new();
+        data.extend_from_slice(&self.previous);
+        data.extend_from_slice(&self.heartbeat);
+        data.extend_from_slice(&self.committee_root);
+        data.extend_from_slice(b"cryptarchia/beacon-mix");
+        hash32(&data)
+    }
+}
+
+crates/cryptarchia-lll/src/stake.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{types::StakeWeight, LllError, LllResult};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StakeAccount {
+    pub owner_commitment: [u8; 32],
+    pub stake: u128,
+    pub online: bool,
+    pub jailed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ValidatorRecord {
+    pub node_commitment: [u8; 32],
+    pub stake: u128,
+    pub online: bool,
+    pub participating: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ValidatorRoot {
+    pub root: [u8; 32],
+    pub total_stake: u128,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StakeTable {
+    pub validators: Vec<ValidatorRecord>,
+}
+
+impl StakeTable {
+    pub fn total_stake(&self) -> u128 {
+        self.validators
+            .iter()
+            .filter(|v| v.online && v.participating && v.stake > 0)
+            .map(|v| v.stake)
+            .fold(0u128, |acc, x| acc.saturating_add(x))
+    }
+
+    pub fn active_count(&self) -> usize {
+        self.validators
+            .iter()
+            .filter(|v| v.online && v.participating && v.stake > 0)
+            .count()
+    }
+
+    pub fn validator_root(&self) -> ValidatorRoot {
+        let mut bytes = Vec::new();
+        for v in &self.validators {
+            bytes.extend_from_slice(&v.node_commitment);
+            bytes.extend_from_slice(&v.stake.to_le_bytes());
+            bytes.push(v.online as u8);
+            bytes.push(v.participating as u8);
+        }
+        let root = crate::crypto::hash32(&bytes);
+        ValidatorRoot {
+            root,
+            total_stake: self.total_stake(),
+            count: self.active_count(),
+        }
+    }
+
+    pub fn sort_by_stake_desc(&mut self) {
+        self.validators.sort_by(|a, b| b.stake.cmp(&a.stake));
+    }
+
+    pub fn validate(&self) -> LllResult<()> {
+        if self.validators.is_empty() {
+            return Err(LllError::NoValidators);
+        }
+        if self.total_stake() == 0 {
+            return Err(LllError::ZeroTotalStake);
+        }
+        Ok(())
+    }
+
+    pub fn weight_of(&self, node_commitment: &[u8; 32]) -> Option<StakeWeight> {
+        self.validators
+            .iter()
+            .find(|v| &v.node_commitment == node_commitment)
+            .map(|v| StakeWeight {
+                raw: v.stake,
+                effective: v.stake,
+            })
+    }
+}
+
+pub fn stake_probability_ppm(stake: u128, total_stake: u128) -> u64 {
+    if stake == 0 || total_stake == 0 {
+        return 0;
+    }
+    let ppm = stake.saturating_mul(1_000_000u128) / total_stake;
+    ppm.min(u64::MAX as u128) as u64
+}
+
+pub fn effective_leader_threshold(
+    stake: u128,
+    total_stake: u128,
+    base_threshold: u128,
+) -> u128 {
+    if total_stake == 0 {
+        return 0;
+    }
+    let proportion = stake.saturating_mul(u128::MAX) / total_stake;
+    proportion.min(base_threshold)
+}
+
+crates/cryptarchia-lll/src/policy.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{types::Slot, LllError, LllResult};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProposalVisibilityPolicy {
+    HiddenByDefault,
+    RevealOnWinOnly,
+    RevealAfterFinality,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CommitteePolicy {
+    Open,
+    Restricted,
+    Hidden,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalPolicy {
+    pub visibility: ProposalVisibilityPolicy,
+    pub committee: CommitteePolicy,
+    pub require_slot_signature: bool,
+    pub require_commitment: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProposalPolicyDecision {
+    Allow,
+    Deny,
+}
+
+impl ProposalPolicy {
+    pub fn strict_private() -> Self {
+        Self {
+            visibility: ProposalVisibilityPolicy::HiddenByDefault,
+            committee: CommitteePolicy::Hidden,
+            require_slot_signature: true,
+            require_commitment: true,
+        }
+    }
+
+    pub fn validate(&self) -> LllResult<()> {
+        match self.visibility {
+            ProposalVisibilityPolicy::HiddenByDefault
+            | ProposalVisibilityPolicy::RevealOnWinOnly
+            | ProposalVisibilityPolicy::RevealAfterFinality => {}
+        }
+        Ok(())
+    }
+
+    pub fn decide(
+        &self,
+        winner_known: bool,
+        has_commitment: bool,
+        signed_slot: bool,
+    ) -> ProposalPolicyDecision {
+        if self.require_commitment && !has_commitment {
+            return ProposalPolicyDecision::Deny;
+        }
+        if self.require_slot_signature && !signed_slot {
+            return ProposalPolicyDecision::Deny;
+        }
+        if matches!(self.visibility, ProposalVisibilityPolicy::RevealOnWinOnly) && !winner_known {
+            return ProposalPolicyDecision::Deny;
+        }
+        ProposalPolicyDecision::Allow
+    }
+}
+
+crates/cryptarchia-lll/src/schedule.rs
+use serde::{Deserialize, Serialize};
+
+use crate::{EpochId, Slot};
+
+pub type SlotIndex = u64;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EpochSchedule {
+    pub epoch_length: Slot,
+    pub slot_duration_ms: u64,
+    pub slots_per_leadership_check: u64,
+}
+
+impl EpochSchedule {
+    pub fn slot_to_epoch(&self, slot: Slot) -> EpochId {
+        if self.epoch_length == 0 {
+            0
+        } else {
+            slot / self.epoch_length
+        }
+    }
+
+    pub fn epoch_start_slot(&self, epoch: EpochId) -> Slot {
+        epoch.saturating_mul(self.epoch_length)
+    }
+
+    pub fn slot_within_epoch(&self, slot: Slot) -> Slot {
+        if self.epoch_length == 0 {
+            slot
+        } else {
+            slot % self.epoch_length
+        }
+    }
+
+    pub fn leadership_check_slot(&self, slot: Slot) -> bool {
+        if self.slots_per_leadership_check == 0 {
+            return true;
+        }
+        slot % self.slots_per_leadership_check == 0
+    }
+}
+
+crates/cryptarchia-lll/src/proof.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use base64::{engine::general_purpose, Engine as _};
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    crypto::{derive_epoch_keypair, sign_challenge, verify_signature, NodeSecret},
+    types::{ChainId, EpochId, LeaderAlias, NodePublicKey, Slot},
+    LllError, LllResult,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipPublicInputs {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub beacon_seed: [u8; 32],
+    pub validator_root: [u8; 32],
+    pub stake: u128,
+    pub total_stake: u128,
+    pub threshold: u128,
+    pub ticket: [u8; 32],
+    pub alias: [u8; 32],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipProofHeader {
+    pub version: u8,
+    pub public_key: NodePublicKey,
+    pub alias: LeaderAlias,
+    pub witness_digest: [u8; 32],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipProof {
+    pub header: LeadershipProofHeader,
+    pub public_inputs: LeadershipPublicInputs,
+    pub signature: Vec<u8>,
+    pub challenge_digest: [u8; 32],
+}
+
+pub fn build_leadership_proof(
+    node_secret: &NodeSecret,
+    epoch_seed: &[u8; 32],
+    public_inputs: LeadershipPublicInputs,
+) -> LllResult<LeadershipProof> {
+    let signing_key = derive_epoch_keypair(node_secret, epoch_seed);
+    let public_key = NodePublicKey(signing_key.verifying_key().to_bytes());
+    let challenge = proof_challenge(&public_inputs);
+    let signature = signing_key.sign(&challenge);
+    let challenge_digest = crate::crypto::hash32(&challenge);
+
+    Ok(LeadershipProof {
+        header: LeadershipProofHeader {
+            version: 1,
+            public_key,
+            alias: LeaderAlias(public_inputs.alias),
+            witness_digest: witness_digest(node_secret, &public_inputs),
+        },
+        public_inputs,
+        signature: signature.to_bytes().to_vec(),
+        challenge_digest,
+    })
+}
+
+pub fn verify_leadership_proof(proof: &LeadershipProof) -> LllResult<()> {
+    if proof.header.version != 1 {
+        return Err(LllError::UnsupportedVersion);
+    }
+
+    if proof.public_inputs.alias != proof.header.alias.0 {
+        return Err(LllError::CommitmentMismatch);
+    }
+
+    let challenge = proof_challenge(&proof.public_inputs);
+    if crate::crypto::hash32(&challenge) != proof.challenge_digest {
+        return Err(LllError::ProofVerificationFailed(
+            "challenge digest mismatch".into(),
+        ));
+    }
+
+    if !verify_signature(&proof.header.public_key, &challenge, &proof.signature) {
+        return Err(LllError::ProofVerificationFailed(
+            "signature invalid".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn proof_challenge(inputs: &LeadershipPublicInputs) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"cryptarchia/proof");
+    out.extend_from_slice(&inputs.chain_id.to_le_bytes());
+    out.extend_from_slice(&inputs.epoch_id.to_le_bytes());
+    out.extend_from_slice(&inputs.slot.to_le_bytes());
+    out.extend_from_slice(&inputs.beacon_seed);
+    out.extend_from_slice(&inputs.validator_root);
+    out.extend_from_slice(&inputs.stake.to_le_bytes());
+    out.extend_from_slice(&inputs.total_stake.to_le_bytes());
+    out.extend_from_slice(&inputs.threshold.to_le_bytes());
+    out.extend_from_slice(&inputs.ticket);
+    out.extend_from_slice(&inputs.alias);
+    out
+}
+
+pub fn witness_digest(node_secret: &NodeSecret, inputs: &LeadershipPublicInputs) -> [u8; 32] {
+    let mut data = Vec::new();
+    data.extend_from_slice(&node_secret.secret);
+    data.extend_from_slice(&proof_challenge(inputs));
+    crate::crypto::hash32(&data)
+}
+
+crates/cryptarchia-lll/src/lottery.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    beacon::EpochBeacon,
+    crypto::{derive_alias, derive_ticket, ticket_below_threshold, NodeSecret},
+    policy::{ProposalPolicy, ProposalPolicyDecision, ProposalVisibilityPolicy},
+    proof::{build_leadership_proof, LeadershipProof, LeadershipPublicInputs},
+    schedule::EpochSchedule,
+    stake::{effective_leader_threshold, StakeTable, ValidatorRoot},
+    types::{ChainId, EpochId, LeaderAlias, Slot, WinnerStatus},
+    utils::stable_ratio_u128,
+    LllError, LllResult,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LotteryConfig {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub base_threshold: u128,
+    pub max_threshold: u128,
+    pub min_stake_for_win: u128,
+    pub enable_hidden_aliases: bool,
+}
+
+impl LotteryConfig {
+    pub fn strict_private(chain_id: ChainId, epoch_id: EpochId) -> Self {
+        Self {
+            chain_id,
+            epoch_id,
+            base_threshold: u128::MAX / 2,
+            max_threshold: u128::MAX,
+            min_stake_for_win: 1,
+            enable_hidden_aliases: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LotteryTicket {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub alias: [u8; 32],
+    pub ticket: [u8; 32],
+    pub threshold: u128,
+    pub stake: u128,
+    pub total_stake: u128,
+    pub winner: WinnerStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalAnnounce {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub alias: [u8; 32],
+    pub ticket_digest: [u8; 32],
+    pub payload_commitment: [u8; 32],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalEnvelope {
+    pub announce: ProposalAnnounce,
+    pub proof: LeadershipProof,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipOutcome {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub alias: [u8; 32],
+    pub ticket: [u8; 32],
+    pub threshold: u128,
+    pub is_winner: bool,
+    pub next_check_in_slots: u64,
+    pub proof: Option<LeadershipProof>,
+    pub announce: Option<ProposalAnnounce>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LocalLeadershipLottery {
+    pub config: LotteryConfig,
+    pub schedule: EpochSchedule,
+    pub node_secret: NodeSecret,
+    pub validator_root: [u8; 32],
+    pub beacon_seed: [u8; 32],
+    pub validator_table: StakeTable,
+    pub policy: ProposalPolicy,
+}
+
+impl LocalLeadershipLottery {
+    pub fn new(
+        config: LotteryConfig,
+        schedule: EpochSchedule,
+        node_secret: NodeSecret,
+        validator_table: StakeTable,
+        beacon_seed: [u8; 32],
+        policy: ProposalPolicy,
+    ) -> LllResult<Self> {
+        validator_table.validate()?;
+        let root = validator_table.validator_root();
+        Ok(Self {
+            config,
+            schedule,
+            node_secret,
+            validator_root: root.root,
+            beacon_seed,
+            validator_table,
+            policy,
+        })
+    }
+
+    pub fn current_epoch(&self, slot: Slot) -> EpochId {
+        self.schedule.slot_to_epoch(slot)
+    }
+
+    pub fn evaluate_slot(&self, slot: Slot) -> LllResult<LeadershipOutcome> {
+        let epoch_id = self.current_epoch(slot);
+        let epoch_beacon = EpochBeacon {
+            chain_id: self.config.chain_id,
+            epoch_id,
+            seed: self.beacon_seed,
+        };
+
+        let stake = self
+            .validator_table
+            .weight_of(&self.node_commitment(epoch_id))
+            .map(|w| w.effective)
+            .unwrap_or(0);
+
+        let total_stake = self.validator_table.total_stake();
+        if total_stake == 0 {
+            return Err(LllError::ZeroTotalStake);
+        }
+
+        if stake < self.config.min_stake_for_win {
+            return Ok(LeadershipOutcome {
+                chain_id: self.config.chain_id,
+                epoch_id,
+                slot,
+                alias: self.alias(epoch_id).0,
+                ticket: [0u8; 32],
+                threshold: 0,
+                is_winner: false,
+                next_check_in_slots: self.schedule.slots_per_leadership_check.max(1),
+                proof: None,
+                announce: None,
+            });
+        }
+
+        let alias = self.alias(epoch_id);
+        let ticket = derive_ticket(
+            &self.node_secret,
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &self.beacon_seed,
+            stake,
+            total_stake,
+            &self.validator_root,
+        );
+
+        let threshold = effective_leader_threshold(stake, total_stake, self.config.base_threshold)
+            .min(self.config.max_threshold);
+
+        let is_winner = ticket_below_threshold(&ticket, threshold);
+        let next_check = self.schedule.slots_per_leadership_check.max(1);
+
+        if !is_winner {
+            return Ok(LeadershipOutcome {
+                chain_id: self.config.chain_id,
+                epoch_id,
+                slot,
+                alias: alias.0,
+                ticket,
+                threshold,
+                is_winner: false,
+                next_check_in_slots: next_check,
+                proof: None,
+                announce: None,
+            });
+        }
+
+        let public_inputs = LeadershipPublicInputs {
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            beacon_seed: self.beacon_seed,
+            validator_root: self.validator_root,
+            stake,
+            total_stake,
+            threshold,
+            ticket,
+            alias: alias.0,
+        };
+
+        let proof = build_leadership_proof(&self.node_secret, &self.beacon_seed, public_inputs)?;
+        let payload_commitment = crate::crypto::hash32(&proof.public_inputs.ticket);
+        let announce = ProposalAnnounce {
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            alias: alias.0,
+            ticket_digest: crate::crypto::hash32(&ticket),
+            payload_commitment,
+        };
+
+        if matches!(
+            self.policy.decide(true, true, true),
+            ProposalPolicyDecision::Deny
+        ) {
+            return Err(LllError::ProposalDenied(
+                "proposal policy denied a valid win".into(),
+            ));
+        }
+
+        Ok(LeadershipOutcome {
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            alias: alias.0,
+            ticket,
+            threshold,
+            is_winner: true,
+            next_check_in_slots: next_check,
+            proof: Some(proof),
+            announce: Some(announce),
+        })
+    }
+
+    pub fn build_envelope(&self, slot: Slot, payload: Vec<u8>) -> LllResult<ProposalEnvelope> {
+        let outcome = self.evaluate_slot(slot)?;
+        if !outcome.is_winner {
+            return Err(LllError::ProposalDenied("not leader for this slot".into()));
+        }
+
+        let proof = outcome.proof.ok_or(LllError::UnknownProposer)?;
+        let announce = outcome.announce.ok_or(LllError::UnknownProposer)?;
+
+        Ok(ProposalEnvelope {
+            announce,
+            proof,
+            payload,
+        })
+    }
+
+    pub fn alias(&self, epoch_id: EpochId) -> LeaderAlias {
+        derive_alias(
+            self.config.chain_id,
+            epoch_id,
+            &self.beacon_seed,
+            &self.node_secret.secret,
+        )
+    }
+
+    pub fn node_commitment(&self, epoch_id: EpochId) -> [u8; 32] {
+        crate::crypto::hash32(&[
+            self.alias(epoch_id).0.as_slice(),
+            &self.beacon_seed,
+            &self.config.chain_id.to_le_bytes(),
+        ]
+        .concat())
+    }
+
+    pub fn verify_envelope(&self, envelope: &ProposalEnvelope) -> LllResult<()> {
+        crate::proof::verify_leadership_proof(&envelope.proof)?;
+        if envelope.announce.alias != envelope.proof.header.alias.0 {
+            return Err(LllError::CommitmentMismatch);
+        }
+        if crate::crypto::hash32(&envelope.payload) != envelope.announce.payload_commitment {
+            return Err(LllError::CommitmentMismatch);
+        }
+        Ok(())
+    }
+}
+
+crates/cryptarchia-lll/src/state.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    lottery::{LeadershipOutcome, LotteryTicket, ProposalEnvelope},
+    types::{EpochId, Slot, WinnerStatus},
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalState {
+    pub slot: Slot,
+    pub epoch_id: EpochId,
+    pub proposal_id: [u8; 32],
+    pub alias: [u8; 32],
+    pub announced: bool,
+    pub verified: bool,
+    pub sealed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalHistory {
+    pub proposals: Vec<ProposalState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipState {
+    pub chain_id: u64,
+    pub current_epoch: EpochId,
+    pub last_slot: Slot,
+    pub last_winner_alias: Option<[u8; 32]>,
+    pub accepted: Vec<ProposalState>,
+    pub missed_slots: Vec<Slot>,
+}
+
+impl LeadershipState {
+    pub fn new(chain_id: u64, current_epoch: EpochId) -> Self {
+        Self {
+            chain_id,
+            current_epoch,
+            last_slot: 0,
+            last_winner_alias: None,
+            accepted: Vec::new(),
+            missed_slots: Vec::new(),
+        }
+    }
+
+    pub fn observe_outcome(&mut self, outcome: &LeadershipOutcome) {
+        self.last_slot = outcome.slot;
+        if outcome.is_winner {
+            self.last_winner_alias = Some(outcome.alias);
+        }
+    }
+
+    pub fn record_proposal(&mut self, envelope: &ProposalEnvelope) {
+        let p = ProposalState {
+            slot: envelope.announce.slot,
+            epoch_id: envelope.announce.epoch_id,
+            proposal_id: envelope.announce.payload_commitment,
+            alias: envelope.announce.alias,
+            announced: true,
+            verified: true,
+            sealed: true,
+        };
+        self.accepted.push(p);
+    }
+
+    pub fn record_miss(&mut self, slot: Slot) {
+        self.missed_slots.push(slot);
+    }
+
+    pub fn rotate_epoch(&mut self, new_epoch: EpochId) {
+        self.current_epoch = new_epoch;
+    }
+
+    pub fn audit(&self) -> ProposalHistory {
+        ProposalHistory {
+            proposals: self.accepted.clone(),
+        }
+    }
+}
+
+crates/cryptarchia-lll/src/telemetry.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuditLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditEvent {
+    pub level: AuditLevel,
+    pub category: String,
+    pub message: String,
+    pub slot: Option<u64>,
+    pub epoch_id: Option<u64>,
+}
+
+impl AuditEvent {
+    pub fn new(
+        level: AuditLevel,
+        category: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            level,
+            category: category.into(),
+            message: message.into(),
+            slot: None,
+            epoch_id: None,
+        }
+    }
+
+    pub fn with_slot(mut self, slot: u64) -> Self {
+        self.slot = Some(slot);
+        self
+    }
+
+    pub fn with_epoch(mut self, epoch_id: u64) -> Self {
+        self.epoch_id = Some(epoch_id);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LotteryTrace {
+    pub events: Vec<AuditEvent>,
+}
+
+impl LotteryTrace {
+    pub fn push(&mut self, event: AuditEvent) {
+        self.events.push(event);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LotteryMetrics {
+    pub evaluated_slots: u64,
+    pub wins: u64,
+    pub misses: u64,
+    pub proofs_built: u64,
+    pub proposals_emitted: u64,
+    pub total_latency_ns: u128,
+}
+
+impl LotteryMetrics {
+    pub fn record_win(&mut self) {
+        self.wins += 1;
+        self.evaluated_slots += 1;
+    }
+
+    pub fn record_miss(&mut self) {
+        self.misses += 1;
+        self.evaluated_slots += 1;
+    }
+
+    pub fn record_proof(&mut self) {
+        self.proofs_built += 1;
+    }
+
+    pub fn record_proposal(&mut self) {
+        self.proposals_emitted += 1;
+    }
+
+    pub fn add_latency(&mut self, nanos: u128) {
+        self.total_latency_ns = self.total_latency_ns.saturating_add(nanos);
+    }
+
+    pub fn average_latency_ns(&self) -> u128 {
+        if self.evaluated_slots == 0 {
+            0
+        } else {
+            self.total_latency_ns / self.evaluated_slots as u128
+        }
+    }
+}
+
+crates/cryptarchia-lll/src/beacon.rs
+use serde::{Deserialize, Serialize};
+
+use crate::{crypto::hash32, Slot};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EpochBeacon {
+    pub chain_id: u64,
+    pub epoch_id: u64,
+    pub seed: [u8; 32],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotSeed {
+    pub slot: Slot,
+    pub seed: [u8; 32],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BeaconMix {
+    pub previous: [u8; 32],
+    pub heartbeat: [u8; 32],
+    pub committee_root: [u8; 32],
+}
+
+impl EpochBeacon {
+    pub fn slot_seed(&self, slot: Slot) -> SlotSeed {
+        let mut data = Vec::new();
+        data.extend_from_slice(&self.seed);
+        data.extend_from_slice(&slot.to_le_bytes());
+        data.extend_from_slice(b"cryptarchia/slot-seed");
+        SlotSeed {
+            slot,
+            seed: hash32(&data),
+        }
+    }
+}
+
+impl BeaconMix {
+    pub fn mix(&self) -> [u8; 32] {
+        let mut data = Vec::new();
+        data.extend_from_slice(&self.previous);
+        data.extend_from_slice(&self.heartbeat);
+        data.extend_from_slice(&self.committee_root);
+        data.extend_from_slice(b"cryptarchia/beacon-mix");
+        hash32(&data)
+    }
+}
+
+crates/cryptarchia-lll/src/lottery.rs
+(same file, kept together above)
+crates/cryptarchia-lll/src/codec.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{LllError, LllResult};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CompactEnvelope {
+    pub version: u8,
+    pub kind: String,
+    pub payload_hex: String,
+}
+
+pub fn encode_compact(kind: impl Into<String>, payload: &[u8]) -> LllResult<CompactEnvelope> {
+    Ok(CompactEnvelope {
+        version: crate::LLL_VERSION,
+        kind: kind.into(),
+        payload_hex: hex::encode(payload),
+    })
+}
+
+pub fn decode_compact(raw: &CompactEnvelope) -> LllResult<Vec<u8>> {
+    if raw.version != crate::LLL_VERSION {
+        return Err(LllError::UnsupportedVersion);
+    }
+    hex::decode(&raw.payload_hex).map_err(|e| LllError::Serialization(e.to_string()))
+}
+
+crates/cryptarchia-lll/src/validator.rs
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{stake::StakeTable, LllError, LllResult};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorHealth {
+    pub node_commitment: [u8; 32],
+    pub online: bool,
+    pub participating: bool,
+    pub stake: u128,
+}
+
+pub fn validate_validator_table(table: &StakeTable) -> LllResult<()> {
+    if table.validators.is_empty() {
+        return Err(LllError::NoValidators);
+    }
+    if table.total_stake() == 0 {
+        return Err(LllError::ZeroTotalStake);
+    }
+    Ok(())
+}
+
+crates/cryptarchia-lll/src/simulator.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use rand::{rngs::StdRng, Rng, SeedableRng};
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    crypto::{derive_ticket, random_node_secret, ticket_below_threshold},
+    lottery::{LocalLeadershipLottery, LotteryConfig},
+    policy::ProposalPolicy,
+    schedule::EpochSchedule,
+    stake::{StakeTable, ValidatorRecord},
+    telemetry::{AuditLevel, AuditEvent, LotteryMetrics, LotteryTrace},
+    types::Slot,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimulationConfig {
+    pub chain_id: u64,
+    pub epoch_id: u64,
+    pub slots: u64,
+    pub validators: usize,
+    pub seed: [u8; 32],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimulationStats {
+    pub slots: u64,
+    pub winners: u64,
+    pub losers: u64,
+    pub avg_winner_stake: u128,
+    pub metrics: LotteryMetrics,
+    pub trace: LotteryTrace,
+}
+
+pub fn build_random_validator_table(validators: usize, seed: [u8; 32]) -> StakeTable {
+    let mut rng = StdRng::from_seed(seed);
+    let mut table = StakeTable::default();
+
+    for i in 0..validators {
+        let mut node_commitment = [0u8; 32];
+        rng.fill(&mut node_commitment);
+        let stake = (rng.gen_range(1..1_000_000) as u128) * ((i as u128 % 5) + 1);
+        table.validators.push(ValidatorRecord {
+            node_commitment,
+            stake,
+            online: true,
+            participating: true,
+        });
+    }
+
+    table
+}
+
+pub fn run_simulation(cfg: SimulationConfig) -> SimulationStats {
+    let schedule = EpochSchedule {
+        epoch_length: 128,
+        slot_duration_ms: 2000,
+        slots_per_leadership_check: 1,
+    };
+
+    let validator_table = build_random_validator_table(cfg.validators, cfg.seed);
+    let node_secret = random_node_secret();
+    let lottery = LocalLeadershipLottery::new(
+        LotteryConfig::strict_private(cfg.chain_id, cfg.epoch_id),
+        schedule,
+        node_secret,
+        validator_table,
+        cfg.seed,
+        ProposalPolicy::strict_private(),
+    )
+    .expect("simulation setup must be valid");
+
+    let mut metrics = LotteryMetrics::default();
+    let mut trace = LotteryTrace::default();
+    let mut winners = 0u64;
+    let mut loser_slots = 0u64;
+    let mut total_winner_stake = 0u128;
+
+    for slot in 0..cfg.slots {
+        let t0 = std::time::Instant::now();
+        let outcome = lottery.evaluate_slot(slot).expect("slot eval");
+        let elapsed = t0.elapsed().as_nanos();
+
+        metrics.add_latency(elapsed);
+        metrics.evaluated_slots += 1;
+
+        if outcome.is_winner {
+            winners += 1;
+            metrics.record_win();
+            metrics.record_proof();
+            metrics.record_proposal();
+            total_winner_stake = total_winner_stake.saturating_add(outcome.threshold);
+            trace.push(
+                AuditEvent::new(
+                    AuditLevel::Info,
+                    "simulation",
+                    "slot produced a local winner",
+                )
+                .with_slot(slot)
+                .with_epoch(cfg.epoch_id),
+            );
+        } else {
+            loser_slots += 1;
+            metrics.record_miss();
+            trace.push(
+                AuditEvent::new(
+                    AuditLevel::Debug,
+                    "simulation",
+                    "slot produced no winner",
+                )
+                .with_slot(slot)
+                .with_epoch(cfg.epoch_id),
+            );
+        }
+    }
+
+    SimulationStats {
+        slots: cfg.slots,
+        winners,
+        losers: loser_slots,
+        avg_winner_stake: if winners == 0 { 0 } else { total_winner_stake / winners as u128 },
+        metrics,
+        trace,
+    }
+}
+
+crates/cryptarchia-lll/src/state.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    lottery::{LeadershipOutcome, ProposalEnvelope},
+    types::{EpochId, Slot},
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalState {
+    pub slot: Slot,
+    pub epoch_id: EpochId,
+    pub proposal_id: [u8; 32],
+    pub alias: [u8; 32],
+    pub announced: bool,
+    pub verified: bool,
+    pub sealed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalHistory {
+    pub proposals: Vec<ProposalState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipState {
+    pub chain_id: u64,
+    pub current_epoch: EpochId,
+    pub last_slot: Slot,
+    pub last_winner_alias: Option<[u8; 32]>,
+    pub accepted: Vec<ProposalState>,
+    pub missed_slots: Vec<Slot>,
+}
+
+impl LeadershipState {
+    pub fn new(chain_id: u64, current_epoch: EpochId) -> Self {
+        Self {
+            chain_id,
+            current_epoch,
+            last_slot: 0,
+            last_winner_alias: None,
+            accepted: Vec::new(),
+            missed_slots: Vec::new(),
+        }
+    }
+
+    pub fn observe_outcome(&mut self, outcome: &LeadershipOutcome) {
+        self.last_slot = outcome.slot;
+        if outcome.is_winner {
+            self.last_winner_alias = Some(outcome.alias);
+        }
+    }
+
+    pub fn record_proposal(&mut self, envelope: &ProposalEnvelope) {
+        let p = ProposalState {
+            slot: envelope.announce.slot,
+            epoch_id: envelope.announce.epoch_id,
+            proposal_id: envelope.announce.payload_commitment,
+            alias: envelope.announce.alias,
+            announced: true,
+            verified: true,
+            sealed: true,
+        };
+        self.accepted.push(p);
+    }
+
+    pub fn record_miss(&mut self, slot: Slot) {
+        self.missed_slots.push(slot);
+    }
+
+    pub fn rotate_epoch(&mut self, new_epoch: EpochId) {
+        self.current_epoch = new_epoch;
+    }
+
+    pub fn audit(&self) -> ProposalHistory {
+        ProposalHistory {
+            proposals: self.accepted.clone(),
+        }
+    }
+}
+
+crates/cryptarchia-lll/src/telemetry.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuditLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditEvent {
+    pub level: AuditLevel,
+    pub category: String,
+    pub message: String,
+    pub slot: Option<u64>,
+    pub epoch_id: Option<u64>,
+}
+
+impl AuditEvent {
+    pub fn new(level: AuditLevel, category: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            level,
+            category: category.into(),
+            message: message.into(),
+            slot: None,
+            epoch_id: None,
+        }
+    }
+
+    pub fn with_slot(mut self, slot: u64) -> Self {
+        self.slot = Some(slot);
+        self
+    }
+
+    pub fn with_epoch(mut self, epoch_id: u64) -> Self {
+        self.epoch_id = Some(epoch_id);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LotteryTrace {
+    pub events: Vec<AuditEvent>,
+}
+
+impl LotteryTrace {
+    pub fn push(&mut self, event: AuditEvent) {
+        self.events.push(event);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LotteryMetrics {
+    pub evaluated_slots: u64,
+    pub wins: u64,
+    pub misses: u64,
+    pub proofs_built: u64,
+    pub proposals_emitted: u64,
+    pub total_latency_ns: u128,
+}
+
+impl LotteryMetrics {
+    pub fn record_win(&mut self) {
+        self.wins += 1;
+        self.evaluated_slots += 1;
+    }
+
+    pub fn record_miss(&mut self) {
+        self.misses += 1;
+        self.evaluated_slots += 1;
+    }
+
+    pub fn record_proof(&mut self) {
+        self.proofs_built += 1;
+    }
+
+    pub fn record_proposal(&mut self) {
+        self.proposals_emitted += 1;
+    }
+
+    pub fn add_latency(&mut self, nanos: u128) {
+        self.total_latency_ns = self.total_latency_ns.saturating_add(nanos);
+    }
+
+    pub fn average_latency_ns(&self) -> u128 {
+        if self.evaluated_slots == 0 {
+            0
+        } else {
+            self.total_latency_ns / self.evaluated_slots as u128
+        }
+    }
+}
+
+crates/cryptarchia-lll-cli/Cargo.toml
+[package]
+name = "cryptarchia-lll-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "cryptarchia-lll"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+cryptarchia-lll = { path = "../cryptarchia-lll", features = ["std"] }
+
+crates/cryptarchia-lll-cli/src/main.rs
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+
+mod commands;
+
+#[derive(Parser, Debug)]
+#[command(name = "cryptarchia-lll", version, about = "Cryptarchia local leadership lottery")]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    Simulate(commands::SimulateArgs),
+    Draw(commands::DrawArgs),
+    Verify(commands::VerifyArgs),
+    Export(commands::ExportArgs),
+    Status(commands::StatusArgs),
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Simulate(args) => commands::simulate(args),
+        Command::Draw(args) => commands::draw(args),
+        Command::Verify(args) => commands::verify(args),
+        Command::Export(args) => commands::export(args),
+        Command::Status(args) => commands::status(args),
+    }
+}
+
+crates/cryptarchia-lll-cli/src/commands.rs
+use anyhow::{Context, Result};
+use clap::Args;
+use cryptarchia_lll::{
+    build_leadership_proof, decode_compact, derive_epoch_keypair, derive_ticket,
+    from_json_str, hash32, random_node_secret, ticket_below_threshold, AuditEvent, AuditLevel,
+    EpochBeacon, EpochSchedule, LeadershipOutcome, LeadershipPolicy, LotteryConfig,
+    LocalLeadershipLottery, NodeSecret, ProposalEnvelope, ProposalPolicy, StakeTable,
+    ValidatorRecord,
+};
+use serde::{Deserialize, Serialize};
+use std::{fs, path::PathBuf};
+
+#[derive(Args, Debug)]
+pub struct SimulateArgs {
+    #[arg(long, default_value_t = 64)]
+    pub slots: u64,
+
+    #[arg(long, default_value_t = 8)]
+    pub validators: usize,
+
+    #[arg(long, default_value_t = 1)]
+    pub chain_id: u64,
+}
+
+#[derive(Args, Debug)]
+pub struct DrawArgs {
+    #[arg(long)]
+    pub slot: u64,
+
+    #[arg(long, default_value_t = 1)]
+    pub chain_id: u64,
+}
+
+#[derive(Args, Debug)]
+pub struct VerifyArgs {
+    #[arg(long)]
+    pub input: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct ExportArgs {
+    #[arg(long)]
+    pub input: PathBuf,
+
+    #[arg(long)]
+    pub output: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct StatusArgs {
+    #[arg(long)]
+    pub input: Option<PathBuf>,
+}
+
+pub fn simulate(args: SimulateArgs) -> Result<()> {
+    let seed = [7u8; 32];
+    let mut table = StakeTable::default();
+
+    for i in 0..args.validators {
+        let mut node_commitment = [0u8; 32];
+        node_commitment[0] = i as u8;
+        table.validators.push(ValidatorRecord {
+            node_commitment,
+            stake: ((i as u128) + 1) * 1000,
+            online: true,
+            participating: true,
+        });
+    }
+
+    let schedule = EpochSchedule {
+        epoch_length: 128,
+        slot_duration_ms: 2000,
+        slots_per_leadership_check: 1,
+    };
+
+    let lll = LocalLeadershipLottery::new(
+        LotteryConfig::strict_private(args.chain_id, 0),
+        schedule,
+        random_node_secret(),
+        table,
+        seed,
+        ProposalPolicy::strict_private(),
+    )?;
+
+    let mut wins = 0u64;
+    for slot in 0..args.slots {
+        let outcome = lll.evaluate_slot(slot)?;
+        if outcome.is_winner {
+            wins += 1;
+        }
+        println!("{}", serde_json::to_string_pretty(&outcome)?);
+    }
+
+    println!("summary: slots={} wins={}", args.slots, wins);
+    Ok(())
+}
+
+pub fn draw(args: DrawArgs) -> Result<()> {
+    let seed = [9u8; 32];
+    let mut table = StakeTable::default();
+    table.validators.push(ValidatorRecord {
+        node_commitment: [1u8; 32],
+        stake: 10_000,
+        online: true,
+        participating: true,
+    });
+    table.validators.push(ValidatorRecord {
+        node_commitment: [2u8; 32],
+        stake: 7_500,
+        online: true,
+        participating: true,
+    });
+
+    let schedule = EpochSchedule {
+        epoch_length: 128,
+        slot_duration_ms: 2000,
+        slots_per_leadership_check: 1,
+    };
+
+    let lll = LocalLeadershipLottery::new(
+        LotteryConfig::strict_private(args.chain_id, 0),
+        schedule,
+        random_node_secret(),
+        table,
+        seed,
+        ProposalPolicy::strict_private(),
+    )?;
+
+    let outcome = lll.evaluate_slot(args.slot)?;
+    println!("{}", serde_json::to_string_pretty(&outcome)?);
+    Ok(())
+}
+
+pub fn verify(args: VerifyArgs) -> Result<()> {
+    let raw = fs::read_to_string(&args.input)
+        .with_context(|| format!("failed to read {}", args.input.display()))?;
+    let envelope: ProposalEnvelope = serde_json::from_str(&raw)?;
+    let seed = [9u8; 32];
+    let mut table = StakeTable::default();
+    table.validators.push(ValidatorRecord {
+        node_commitment: [1u8; 32],
+        stake: 10_000,
+        online: true,
+        participating: true,
+    });
+
+    let lll = LocalLeadershipLottery::new(
+        LotteryConfig::strict_private(envelope.announce.chain_id, envelope.announce.epoch_id),
+        EpochSchedule {
+            epoch_length: 128,
+            slot_duration_ms: 2000,
+            slots_per_leadership_check: 1,
+        },
+        random_node_secret(),
+        table,
+        seed,
+        ProposalPolicy::strict_private(),
+    )?;
+
+    lll.verify_envelope(&envelope)?;
+    println!("proposal envelope verified");
+    Ok(())
+}
+
+pub fn export(args: ExportArgs) -> Result<()> {
+    let raw = fs::read_to_string(&args.input)
+        .with_context(|| format!("failed to read {}", args.input.display()))?;
+    fs::write(&args.output, raw)?;
+    println!("exported to {}", args.output.display());
+    Ok(())
+}
+
+pub fn status(args: StatusArgs) -> Result<()> {
+    if let Some(input) = args.input {
+        let raw = fs::read_to_string(&input)
+            .with_context(|| format!("failed to read {}", input.display()))?;
+        println!("{}", raw);
+    } else {
+        println!("cryptarchia-lll status: ready");
+    }
+    Ok(())
+}
+
+crates/cryptarchia-lll/src/tests.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        crypto::{random_node_secret, ticket_below_threshold},
+        lottery::{LocalLeadershipLottery, LotteryConfig},
+        policy::ProposalPolicy,
+        schedule::EpochSchedule,
+        stake::{StakeTable, ValidatorRecord},
+    };
+
+    #[test]
+    fn alias_rotates_by_epoch() {
+        let secret = random_node_secret();
+        let a = secret.alias(1, 1, &[1u8; 32]);
+        let b = secret.alias(1, 2, &[1u8; 32]);
+        assert_ne!(a.0, b.0);
+    }
+
+    #[test]
+    fn ticket_threshold_behavior() {
+        let ticket = [0u8; 32];
+        assert!(ticket_below_threshold(&ticket, u128::MAX));
+        assert!(ticket_below_threshold(&ticket, 1));
+    }
+
+    #[test]
+    fn evaluate_slot_produces_outcome() {
+        let mut table = StakeTable::default();
+        table.validators.push(ValidatorRecord {
+            node_commitment: [3u8; 32],
+            stake: 100,
+            online: true,
+            participating: true,
+        });
+
+        let lottery = LocalLeadershipLottery::new(
+            LotteryConfig::strict_private(1, 0),
+            EpochSchedule {
+                epoch_length: 128,
+                slot_duration_ms: 2000,
+                slots_per_leadership_check: 1,
+            },
+            random_node_secret(),
+            table,
+            [2u8; 32],
+            ProposalPolicy::strict_private(),
+        )
+        .unwrap();
+
+        let outcome = lottery.evaluate_slot(7).unwrap();
+        assert_eq!(outcome.chain_id, 1);
+    }
+}
+
+crates/cryptarchia-lll/src/telemetry.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuditLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditEvent {
+    pub level: AuditLevel,
+    pub category: String,
+    pub message: String,
+    pub slot: Option<u64>,
+    pub epoch_id: Option<u64>,
+}
+
+impl AuditEvent {
+    pub fn new(level: AuditLevel, category: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            level,
+            category: category.into(),
+            message: message.into(),
+            slot: None,
+            epoch_id: None,
+        }
+    }
+
+    pub fn with_slot(mut self, slot: u64) -> Self {
+        self.slot = Some(slot);
+        self
+    }
+
+    pub fn with_epoch(mut self, epoch_id: u64) -> Self {
+        self.epoch_id = Some(epoch_id);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LotteryTrace {
+    pub events: Vec<AuditEvent>,
+}
+
+impl LotteryTrace {
+    pub fn push(&mut self, event: AuditEvent) {
+        self.events.push(event);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LotteryMetrics {
+    pub evaluated_slots: u64,
+    pub wins: u64,
+    pub misses: u64,
+    pub proofs_built: u64,
+    pub proposals_emitted: u64,
+    pub total_latency_ns: u128,
+}
+
+impl LotteryMetrics {
+    pub fn record_win(&mut self) {
+        self.wins += 1;
+        self.evaluated_slots += 1;
+    }
+
+    pub fn record_miss(&mut self) {
+        self.misses += 1;
+        self.evaluated_slots += 1;
+    }
+
+    pub fn record_proof(&mut self) {
+        self.proofs_built += 1;
+    }
+
+    pub fn record_proposal(&mut self) {
+        self.proposals_emitted += 1;
+    }
+
+    pub fn add_latency(&mut self, nanos: u128) {
+        self.total_latency_ns = self.total_latency_ns.saturating_add(nanos);
+    }
+
+    pub fn average_latency_ns(&self) -> u128 {
+        if self.evaluated_slots == 0 {
+            0
+        } else {
+            self.total_latency_ns / self.evaluated_slots as u128
+        }
+    }
+}
+
+crates/cryptarchia-lll/src/lottery.rs
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    beacon::EpochBeacon,
+    crypto::{derive_alias, derive_ticket, ticket_below_threshold, NodeSecret},
+    policy::{ProposalPolicy, ProposalPolicyDecision},
+    proof::{build_leadership_proof, LeadershipProof, LeadershipPublicInputs},
+    schedule::EpochSchedule,
+    stake::{effective_leader_threshold, StakeTable},
+    types::{ChainId, EpochId, LeaderAlias, Slot, WinnerStatus},
+    LllError, LllResult,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LotteryConfig {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub base_threshold: u128,
+    pub max_threshold: u128,
+    pub min_stake_for_win: u128,
+    pub enable_hidden_aliases: bool,
+}
+
+impl LotteryConfig {
+    pub fn strict_private(chain_id: ChainId, epoch_id: EpochId) -> Self {
+        Self {
+            chain_id,
+            epoch_id,
+            base_threshold: u128::MAX / 2,
+            max_threshold: u128::MAX,
+            min_stake_for_win: 1,
+            enable_hidden_aliases: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LotteryTicket {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub alias: [u8; 32],
+    pub ticket: [u8; 32],
+    pub threshold: u128,
+    pub stake: u128,
+    pub total_stake: u128,
+    pub winner: WinnerStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalAnnounce {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub alias: [u8; 32],
+    pub ticket_digest: [u8; 32],
+    pub payload_commitment: [u8; 32],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalEnvelope {
+    pub announce: ProposalAnnounce,
+    pub proof: LeadershipProof,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipOutcome {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub alias: [u8; 32],
+    pub ticket: [u8; 32],
+    pub threshold: u128,
+    pub is_winner: bool,
+    pub next_check_in_slots: u64,
+    pub proof: Option<LeadershipProof>,
+    pub announce: Option<ProposalAnnounce>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LocalLeadershipLottery {
+    pub config: LotteryConfig,
+    pub schedule: EpochSchedule,
+    pub node_secret: NodeSecret,
+    pub validator_root: [u8; 32],
+    pub beacon_seed: [u8; 32],
+    pub validator_table: StakeTable,
+    pub policy: ProposalPolicy,
+}
+
+impl LocalLeadershipLottery {
+    pub fn new(
+        config: LotteryConfig,
+        schedule: EpochSchedule,
+        node_secret: NodeSecret,
+        validator_table: StakeTable,
+        beacon_seed: [u8; 32],
+        policy: ProposalPolicy,
+    ) -> LllResult<Self> {
+        validator_table.validate()?;
+        let root = validator_table.validator_root();
+        Ok(Self {
+            config,
+            schedule,
+            node_secret,
+            validator_root: root.root,
+            beacon_seed,
+            validator_table,
+            policy,
+        })
+    }
+
+    pub fn current_epoch(&self, slot: Slot) -> EpochId {
+        self.schedule.slot_to_epoch(slot)
+    }
+
+    pub fn alias(&self, epoch_id: EpochId) -> LeaderAlias {
+        derive_alias(
+            self.config.chain_id,
+            epoch_id,
+            &self.beacon_seed,
+            &self.node_secret.secret,
+        )
+    }
+
+    pub fn evaluate_slot(&self, slot: Slot) -> LllResult<LeadershipOutcome> {
+        let epoch_id = self.current_epoch(slot);
+        let epoch_beacon = EpochBeacon {
+            chain_id: self.config.chain_id,
+            epoch_id,
+            seed: self.beacon_seed,
+        };
+
+        let stake = self
+            .validator_table
+            .weight_of(&self.node_commitment(epoch_id))
+            .map(|w| w.effective)
+            .unwrap_or(0);
+
+        let total_stake = self.validator_table.total_stake();
+        if total_stake == 0 {
+            return Err(LllError::ZeroTotalStake);
+        }
+
+        let alias = self.alias(epoch_id);
+        let ticket = derive_ticket(
+            &self.node_secret,
+            self.config.chain_id,
+            epoch_id,
+            slot,
+            &self.beacon_seed,
+            stake,
+            total_stake,
+            &self.validator_root,
+        );
+
+        let threshold = effective_leader_threshold(stake, total_stake, self.config.base_threshold)
+            .min(self.config.max_threshold);
+
+        let is_winner = stake >= self.config.min_stake_for_win
+            && ticket_below_threshold(&ticket, threshold);
+
+        let next_check = self.schedule.slots_per_leadership_check.max(1);
+
+        if !is_winner {
+            return Ok(LeadershipOutcome {
+                chain_id: self.config.chain_id,
+                epoch_id,
+                slot,
+                alias: alias.0,
+                ticket,
+                threshold,
+                is_winner: false,
+                next_check_in_slots: next_check,
+                proof: None,
+                announce: None,
+            });
+        }
+
+        let public_inputs = LeadershipPublicInputs {
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            beacon_seed: self.beacon_seed,
+            validator_root: self.validator_root,
+            stake,
+            total_stake,
+            threshold,
+            ticket,
+            alias: alias.0,
+        };
+
+        let proof = build_leadership_proof(&self.node_secret, &self.beacon_seed, public_inputs)?;
+        let payload_commitment = crate::crypto::hash32(&proof.public_inputs.ticket);
+        let announce = ProposalAnnounce {
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            alias: alias.0,
+            ticket_digest: crate::crypto::hash32(&ticket),
+            payload_commitment,
+        };
+
+        if matches!(self.policy.decide(true, true, true), ProposalPolicyDecision::Deny) {
+            return Err(LllError::ProposalDenied(
+                "proposal policy denied a valid win".into(),
+            ));
+        }
+
+        Ok(LeadershipOutcome {
+            chain_id: self.config.chain_id,
+            epoch_id,
+            slot,
+            alias: alias.0,
+            ticket,
+            threshold,
+            is_winner: true,
+            next_check_in_slots: next_check,
+            proof: Some(proof),
+            announce: Some(announce),
+        })
+    }
+
+    pub fn node_commitment(&self, epoch_id: EpochId) -> [u8; 32] {
+        crate::crypto::hash32(
+            &[
+                self.alias(epoch_id).0.as_slice(),
+                &self.beacon_seed,
+                &self.config.chain_id.to_le_bytes(),
+            ]
+            .concat(),
+        )
+    }
+
+    pub fn build_envelope(&self, slot: Slot, payload: Vec<u8>) -> LllResult<ProposalEnvelope> {
+        let outcome = self.evaluate_slot(slot)?;
+        if !outcome.is_winner {
+            return Err(LllError::ProposalDenied("not leader for this slot".into()));
+        }
+
+        let proof = outcome.proof.ok_or(LllError::UnknownProposer)?;
+        let announce = outcome.announce.ok_or(LllError::UnknownProposer)?;
+
+        Ok(ProposalEnvelope {
+            announce,
+            proof,
+            payload,
+        })
+    }
+
+    pub fn verify_envelope(&self, envelope: &ProposalEnvelope) -> LllResult<()> {
+        crate::proof::verify_leadership_proof(&envelope.proof)?;
+        if envelope.announce.alias != envelope.proof.header.alias.0 {
+            return Err(LllError::CommitmentMismatch);
+        }
+        if crate::crypto::hash32(&envelope.payload) != envelope.announce.payload_commitment {
+            return Err(LllError::CommitmentMismatch);
+        }
+        Ok(())
+    }
+}
+
+crates/cryptarchia-lll/src/proof.rs
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    crypto::{derive_epoch_keypair, NodeSecret},
+    types::{ChainId, EpochId, LeaderAlias, NodePublicKey, Slot},
+    LllError, LllResult,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipPublicInputs {
+    pub chain_id: ChainId,
+    pub epoch_id: EpochId,
+    pub slot: Slot,
+    pub beacon_seed: [u8; 32],
+    pub validator_root: [u8; 32],
+    pub stake: u128,
+    pub total_stake: u128,
+    pub threshold: u128,
+    pub ticket: [u8; 32],
+    pub alias: [u8; 32],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipProofHeader {
+    pub version: u8,
+    pub public_key: NodePublicKey,
+    pub alias: LeaderAlias,
+    pub witness_digest: [u8; 32],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LeadershipProof {
+    pub header: LeadershipProofHeader,
+    pub public_inputs: LeadershipPublicInputs,
+    pub signature: Vec<u8>,
+    pub challenge_digest: [u8; 32],
+}
+
+pub fn build_leadership_proof(
+    node_secret: &NodeSecret,
+    epoch_seed: &[u8; 32],
+    public_inputs: LeadershipPublicInputs,
+) -> LllResult<LeadershipProof> {
+    let signing_key = derive_epoch_keypair(node_secret, epoch_seed);
+    let public_key = NodePublicKey(signing_key.verifying_key().to_bytes());
+    let challenge = proof_challenge(&public_inputs);
+    let signature = signing_key.sign(&challenge);
+    let challenge_digest = crate::crypto::hash32(&challenge);
+
+    Ok(LeadershipProof {
+        header: LeadershipProofHeader {
+            version: 1,
+            public_key,
+            alias: LeaderAlias(public_inputs.alias),
+            witness_digest: witness_digest(node_secret, &public_inputs),
+        },
+        public_inputs,
+        signature: signature.to_bytes().to_vec(),
+        challenge_digest,
+    })
+}
+
+pub fn verify_leadership_proof(proof: &LeadershipProof) -> LllResult<()> {
+    if proof.header.version != 1 {
+        return Err(LllError::UnsupportedVersion);
+    }
+
+    if proof.public_inputs.alias != proof.header.alias.0 {
+        return Err(LllError::CommitmentMismatch);
+    }
+
+    let challenge = proof_challenge(&proof.public_inputs);
+    if crate::crypto::hash32(&challenge) != proof.challenge_digest {
+        return Err(LllError::ProofVerificationFailed(
+            "challenge digest mismatch".into(),
+        ));
+    }
+
+    if !crate::crypto::verify_signature(&proof.header.public_key, &challenge, &proof.signature) {
+        return Err(LllError::ProofVerificationFailed("signature invalid".into()));
+    }
+
+    Ok(())
+}
+
+pub fn proof_challenge(inputs: &LeadershipPublicInputs) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"cryptarchia/proof");
+    out.extend_from_slice(&inputs.chain_id.to_le_bytes());
+    out.extend_from_slice(&inputs.epoch_id.to_le_bytes());
+    out.extend_from_slice(&inputs.slot.to_le_bytes());
+    out.extend_from_slice(&inputs.beacon_seed);
+    out.extend_from_slice(&inputs.validator_root);
+    out.extend_from_slice(&inputs.stake.to_le_bytes());
+    out.extend_from_slice(&inputs.total_stake.to_le_bytes());
+    out.extend_from_slice(&inputs.threshold.to_le_bytes());
+    out.extend_from_slice(&inputs.ticket);
+    out.extend_from_slice(&inputs.alias);
+    out
+}
+
+pub fn witness_digest(node_secret: &NodeSecret, inputs: &LeadershipPublicInputs) -> [u8; 32] {
+    let mut data = Vec::new();
+    data.extend_from_slice(&node_secret.secret);
+    data.extend_from_slice(&proof_challenge(inputs));
+    crate::crypto::hash32(&data)
+}
+
+README.md
+# Cryptarchia Local Leadership Lottery
+
+This module set implements a private proof-of-stake leadership lottery where:
+- each node independently checks whether it won the right to propose a block,
+- the proposer's identity is hidden behind an epoch-rotating alias,
+- the proposal is committed and later verified with a local proof,
+- stake weighting influences win probability,
+- slots, epochs, and proposal history are tracked explicitly.
+
+## Core ideas
+
+1. **Hidden identity**
+   The node uses an epoch-derived signing key and a derived alias. The alias changes every epoch and does not directly reveal the operator identity.
+
+2. **Local leadership lottery**
+   Every node performs the same slot evaluation locally. If the generated ticket is below the threshold, the node considers itself the proposer for that slot.
+
+3. **Stake weighting**
+   Larger stake increases the chance of winning the slot.
+
+4. **Proposal proof**
+   A proposal carries a signed proof over public inputs: chain id, epoch, slot, beacon seed, validator root, stake, and the ticket.
+
+5. **Commitment-first envelopes**
+   Block payloads are committed before reveal and verified against the hash in the announcement.
+
+## Typical flow
+
+1. Load the validator table.
+2. Mix the epoch beacon.
+3. For each slot, derive the ticket.
+4. If the ticket wins, build a proposal envelope.
+5. Verify the envelope before broadcasting.
+6. Record the proposal in local state and telemetry.
+
+## CLI examples
+
+```bash
+cryptarchia-lll simulate --slots 64 --validators 8 --chain-id 1
+cryptarchia-lll draw --slot 42 --chain-id 1
+cryptarchia-lll verify --input proposal.json
+
+
+### `tests/lll.rs`
+```rust
+use cryptarchia_lll::{
+    random_node_secret, stake_probability_ppm, EpochSchedule, LocalLeadershipLottery,
+    LotteryConfig, ProposalPolicy, StakeTable, ValidatorRecord,
+};
+
+#[test]
+fn stake_probability_is_bounded() {
+    assert_eq!(stake_probability_ppm(0, 100), 0);
+    assert!(stake_probability_ppm(50, 100) > 0);
+}
+
+#[test]
+fn hidden_alias_changes_per_epoch() {
+    let secret = random_node_secret();
+    let a = secret.alias(1, 1, &[1u8; 32]);
+    let b = secret.alias(1, 2, &[1u8; 32]);
+    assert_ne!(a.0, b.0);
+}
+
+#[test]
+fn lottery_evaluates() {
+    let mut table = StakeTable::default();
+    table.validators.push(ValidatorRecord {
+        node_commitment: [3u8; 32],
+        stake: 10_000,
+        online: true,
+        participating: true,
+    });
+
+    let lottery = LocalLeadershipLottery::new(
+        LotteryConfig::strict_private(1, 0),
+        EpochSchedule {
+            epoch_length: 128,
+            slot_duration_ms: 2000,
+            slots_per_leadership_check: 1,
+        },
+        random_node_secret(),
+        table,
+        [2u8; 32],
+        ProposalPolicy::strict_private(),
+    )
+    .unwrap();
+
+    let out = lottery.evaluate_slot(7).unwrap();
+    assert_eq!(out.chain_id, 1);
+}
+
+crates/cryptarchia-lll-cli/src/bin_example.rs
+// Optional helper example for embedding the lottery into a node process.
+// This file can be used as a template for direct integration.
+
+examples/node-integration.rs
+use cryptarchia_lll::{
+    random_node_secret, EpochSchedule, LocalLeadershipLottery, LotteryConfig, ProposalPolicy,
+    StakeTable, ValidatorRecord,
+};
+
+fn main() -> anyhow::Result<()> {
+    let mut table = StakeTable::default();
+    table.validators.push(ValidatorRecord {
+        node_commitment: [1u8; 32],
+        stake: 100_000,
+        online: true,
+        participating: true,
+    });
+
+    let lottery = LocalLeadershipLottery::new(
+        LotteryConfig::strict_private(1, 0),
+        EpochSchedule {
+            epoch_length: 128,
+            slot_duration_ms: 2000,
+            slots_per_leadership_check: 1,
+        },
+        random_node_secret(),
+        table,
+        [9u8; 32],
+        ProposalPolicy::strict_private(),
+    )?;
+
+    for slot in 0..32 {
+        let outcome = lottery.evaluate_slot(slot)?;
+        if outcome.is_winner {
+            println!("slot {slot}: win with alias {}", hex::encode(outcome.alias));
+        }
+    }
+
+    Ok(())
+}
+
+This gives you the core of a private local leadership lottery with hidden proposer identity, stake weighting, epoch-rotating aliases, proposal proofs, and a small CLI for simulation and verification.
+

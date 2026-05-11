@@ -1,0 +1,744 @@
+Below is a polished landing page implementation you can drop into a React app. It is built around the project’s cosmic / Logos / Heraclitus theme and includes a hero section, animated feature grid, callout panels, roadmap, metrics, FAQ, and a strong footer. I am giving it as a small file set so it is easier to paste into a repo.
+
+src/App.tsx
+import React from "react";
+import {
+  ArrowRight,
+  BookOpen,
+  BrainCircuit,
+  ChevronRight,
+  CircleDot,
+  Code2,
+  Crown,
+  Flame,
+  GitBranch,
+  Github,
+  Globe2,
+  Layers3,
+  Lock,
+  Sparkles,
+  Stars,
+  Shield,
+  Zap,
+} from "lucide-react";
+import { motion } from "framer-motion";
+
+type Feature = {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+};
+
+type Principle = {
+  title: string;
+  body: string;
+};
+
+const features: Feature[] = [
+  {
+    icon: <Sparkles className="h-5 w-5" />,
+    title: "Logos-driven design",
+    description:
+      "A symbolic interface that frames the project as a living system of meaning, order, and self-correction.",
+  },
+  {
+    icon: <BrainCircuit className="h-5 w-5" />,
+    title: "Composable intelligence",
+    description:
+      "The landing page introduces the project’s layered architecture through clean, human-readable sections.",
+  },
+  {
+    icon: <Shield className="h-5 w-5" />,
+    title: "Privacy-first narrative",
+    description:
+      "The visual language emphasizes trust, transparency, and local reasoning without revealing unnecessary detail.",
+  },
+  {
+    icon: <Code2 className="h-5 w-5" />,
+    title: "Developer-friendly entry",
+    description:
+      "The layout makes it easy for builders to understand purpose, status, structure, and where to start.",
+  },
+  {
+    icon: <Layers3 className="h-5 w-5" />,
+    title: "Modular sections",
+    description:
+      "Each section stands on its own, making it simple to expand the page later with docs, demos, or metrics.",
+  },
+  {
+    icon: <Zap className="h-5 w-5" />,
+    title: "Fast, minimal, modern",
+    description:
+      "Motion and gradients are used sparingly so the page feels premium without becoming noisy.",
+  },
+];
+
+const principles: Principle[] = [
+  {
+    title: "Cosmic order",
+    body:
+      "The landing page frames the project as a system governed by structure, rhythm, and patterns rather than clutter.",
+  },
+  {
+    title: "Readable depth",
+    body:
+      "Visitors should understand the project in seconds, while builders should find enough detail to stay engaged.",
+  },
+  {
+    title: "Quiet confidence",
+    body:
+      "The design avoids hype. It presents the project with calm energy, strong typography, and intentional spacing.",
+  },
+  {
+    title: "Future growth",
+    body:
+      "The layout anticipates expansion: docs, governance, demos, privacy primitives, and community content can slot in cleanly.",
+  },
+];
+
+const roadmap = [
+  {
+    phase: "01",
+    title: "Introduce the vision",
+    body:
+      "Use the hero and manifesto blocks to explain the project’s purpose, tone, and architectural philosophy.",
+  },
+  {
+    phase: "02",
+    title: "Show the system",
+    body:
+      "Surface the core modules, privacy concepts, and lifecycle flow through cards and structured callouts.",
+  },
+  {
+    phase: "03",
+    title: "Build trust",
+    body:
+      "Add clarity around verification, provenance, and security so users understand what the system does and why it matters.",
+  },
+  {
+    phase: "04",
+    title: "Invite participation",
+    body:
+      "Provide actions for exploring the repo, reading docs, running demos, and contributing to the next iteration.",
+  },
+];
+
+const stats = [
+  { label: "Core modules", value: "12+" },
+  { label: "Design focus", value: "Cosmic" },
+  { label: "Audience", value: "Builders" },
+  { label: "Default mode", value: "Private" },
+];
+
+const faqs = [
+  {
+    q: "What is this landing page for?",
+    a: "It is a polished front door for the project, designed to explain the idea, highlight the architecture, and guide people toward docs and code.",
+  },
+  {
+    q: "Can this page be extended with live data?",
+    a: "Yes. The sections are structured so you can replace static cards with metrics, charts, status indicators, or blockchain data later.",
+  },
+  {
+    q: "Does the design work well on mobile?",
+    a: "Yes. It uses a simple stack layout, fluid spacing, and responsive grids so the page remains readable on narrow screens.",
+  },
+];
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mx-auto max-w-3xl text-center">
+      <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">
+        {eyebrow}
+      </p>
+      <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+        {title}
+      </h2>
+      <p className="mt-4 text-base leading-7 text-slate-300 sm:text-lg">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function Glow() {
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[600px] bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.24),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(168,85,247,0.18),transparent_28%),radial-gradient(circle_at_20%_30%,rgba(244,114,182,0.14),transparent_30%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-20 h-[1200px] bg-[linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,1))]" />
+      <div className="pointer-events-none absolute inset-0 -z-30 bg-[url('data:image/svg+xml,%3Csvg width=\"180\" height=\"180\" viewBox=\"0 0 180 180\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"%23ffffff\" fill-opacity=\"0.03\"%3E%3Ccircle cx=\"20\" cy=\"20\" r=\"1.2\"/%3E%3Ccircle cx=\"90\" cy=\"50\" r=\"1.2\"/%3E%3Ccircle cx=\"150\" cy=\"130\" r=\"1.2\"/%3E%3Ccircle cx=\"60\" cy=\"140\" r=\"1.2\"/%3E%3C/g%3E%3C/svg%3E')] opacity-50" />
+    </>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{value}</p>
+    </div>
+  );
+}
+
+function FeatureCard({ feature }: { feature: Feature }) {
+  return (
+    <motion.div
+      whileHover={{ y: -6 }}
+      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+      className="group rounded-3xl border border-white/10 bg-white/5 p-6 shadow-lg shadow-black/20 backdrop-blur-sm"
+    >
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300 ring-1 ring-cyan-300/20">
+        {feature.icon}
+      </div>
+      <h3 className="mt-5 text-xl font-semibold text-white">{feature.title}</h3>
+      <p className="mt-3 text-sm leading-7 text-slate-300">{feature.description}</p>
+      <div className="mt-5 flex items-center gap-2 text-sm font-medium text-cyan-300">
+        Learn more <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+      </div>
+    </motion.div>
+  );
+}
+
+function PrincipleCard({ item }: { item: Principle }) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-fuchsia-400/10 text-fuchsia-300 ring-1 ring-fuchsia-300/20">
+          <CircleDot className="h-4 w-4" />
+        </div>
+        <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+      </div>
+      <p className="mt-4 text-sm leading-7 text-slate-300">{item.body}</p>
+    </div>
+  );
+}
+
+function RoadmapCard({
+  phase,
+  title,
+  body,
+}: {
+  phase: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="relative rounded-3xl border border-white/10 bg-white/5 p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300 ring-1 ring-emerald-300/20">
+          <span className="text-sm font-bold">{phase}</span>
+        </div>
+        <div>
+          <h3 className="text-xl font-semibold text-white">{title}</h3>
+          <p className="mt-3 text-sm leading-7 text-slate-300">{body}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+      <Glow />
+
+      <header className="mx-auto max-w-7xl px-6 py-6 lg:px-8">
+        <nav className="flex items-center justify-between gap-4">
+          <a href="#top" className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/10">
+              <Stars className="h-5 w-5 text-cyan-300" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold tracking-wide text-white">
+                Logos Heraclitus
+              </p>
+              <p className="text-xs text-slate-400">Cosmic principle</p>
+            </div>
+          </a>
+
+          <div className="hidden items-center gap-2 md:flex">
+            <a
+              href="#features"
+              className="rounded-full px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+            >
+              Features
+            </a>
+            <a
+              href="#manifesto"
+              className="rounded-full px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+            >
+              Manifesto
+            </a>
+            <a
+              href="#roadmap"
+              className="rounded-full px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+            >
+              Roadmap
+            </a>
+            <a
+              href="#faq"
+              className="rounded-full px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+            >
+              FAQ
+            </a>
+          </div>
+
+          <a
+            href="https://github.com/lucylow/logos_heraclitus_cosmic_principle"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-cyan-100"
+          >
+            <Github className="h-4 w-4" />
+            View repo
+          </a>
+        </nav>
+      </header>
+
+      <main id="top">
+        <section className="mx-auto max-w-7xl px-6 pb-20 pt-14 lg:px-8 lg:pt-24">
+          <div className="grid items-center gap-14 lg:grid-cols-2">
+            <div className="max-w-2xl">
+              <motion.div
+                initial={{ opacity: 0, y: 22 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-200"
+              >
+                <Flame className="h-4 w-4" />
+                Private-by-default. Built for clarity.
+              </motion.div>
+
+              <motion.h1
+                initial={{ opacity: 0, y: 26 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.75, ease: "easeOut", delay: 0.08 }}
+                className="mt-8 text-5xl font-semibold tracking-tight text-white sm:text-6xl xl:text-7xl"
+              >
+                A cosmic front door for{" "}
+                <span className="bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-amber-200 bg-clip-text text-transparent">
+                  Logos, leadership, and privacy.
+                </span>
+              </motion.h1>
+
+              <motion.p
+                initial={{ opacity: 0, y: 22 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.75, ease: "easeOut", delay: 0.15 }}
+                className="mt-8 max-w-xl text-lg leading-8 text-slate-300"
+              >
+                This landing page turns the project into a narrative experience: it
+                presents the architecture, the ideals, and the path forward with
+                calm visuals, elegant motion, and a strong builder-first message.
+              </motion.p>
+
+              <motion.div
+                initial={{ opacity: 0, y: 22 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.75, ease: "easeOut", delay: 0.22 }}
+                className="mt-10 flex flex-col gap-4 sm:flex-row"
+              >
+                <a
+                  href="#manifesto"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-cyan-300 px-6 py-3.5 font-semibold text-slate-950 transition hover:bg-cyan-200"
+                >
+                  Read the manifesto
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a
+                  href="#features"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3.5 font-semibold text-white transition hover:bg-white/10"
+                >
+                  Explore the system
+                  <Globe2 className="h-4 w-4" />
+                </a>
+              </motion.div>
+
+              <div className="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {stats.map((stat) => (
+                  <MetricCard key={stat.label} label={stat.label} value={stat.value} />
+                ))}
+              </div>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
+              className="relative"
+            >
+              <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-cyan-400/20 via-fuchsia-400/20 to-amber-300/10 blur-2xl" />
+              <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 p-6 shadow-2xl shadow-black/40 backdrop-blur">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-white/10 p-3">
+                      <BookOpen className="h-5 w-5 text-cyan-300" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Project at a glance</p>
+                      <p className="text-xs text-slate-400">A landing page with structure</p>
+                    </div>
+                  </div>
+                  <div className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">
+                    Live ready
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-3xl border border-white/10 bg-black/30 p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-2xl bg-cyan-300/10 p-3 text-cyan-300 ring-1 ring-cyan-300/20">
+                      <Lock className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        Privacy-aware design language
+                      </p>
+                      <p className="mt-2 text-sm leading-7 text-slate-300">
+                        The page communicates trust through clean hierarchy, reduced
+                        visual noise, and sections that explain the project without
+                        oversharing internal details.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-center gap-3">
+                      <Crown className="h-4 w-4 text-amber-300" />
+                      <h3 className="font-semibold text-white">Identity</h3>
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-slate-300">
+                      The page feels philosophical, but still practical enough for a
+                      technical audience.
+                    </p>
+                  </div>
+                  <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-center gap-3">
+                      <GitBranch className="h-4 w-4 text-fuchsia-300" />
+                      <h3 className="font-semibold text-white">Structure</h3>
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-slate-300">
+                      Every block is reusable, making it simple to grow the landing
+                      page into a full product website.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-3xl border border-white/10 bg-gradient-to-r from-cyan-300/10 via-fuchsia-300/10 to-amber-200/10 p-5">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="h-4 w-4 text-cyan-300" />
+                    <h3 className="font-semibold text-white">Visual signature</h3>
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-slate-300">
+                    Soft gradients, luminous borders, and subtle motion create a
+                    premium look without becoming busy or distracting.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        <section id="features" className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
+          <SectionHeading
+            eyebrow="Features"
+            title="Everything the landing page should communicate"
+            description="A great landing page tells the story quickly, but also gives builders enough substance to understand the system beneath the surface."
+          />
+
+          <div className="mt-14 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {features.map((feature) => (
+              <FeatureCard key={feature.title} feature={feature} />
+            ))}
+          </div>
+        </section>
+
+        <section id="manifesto" className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
+          <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-xl shadow-black/20">
+              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">
+                Manifesto
+              </p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                A quiet system that feels alive
+              </h2>
+              <p className="mt-6 text-base leading-8 text-slate-300">
+                The landing page is designed to make the project feel intentional.
+                It invites the visitor into a world of layered meaning, but keeps
+                the interface practical enough to serve as a real product homepage.
+              </p>
+              <p className="mt-4 text-base leading-8 text-slate-300">
+                The result is a page that can introduce a philosophy, present a
+                codebase, and convert curiosity into action with a single scroll.
+              </p>
+
+              <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
+                  <p className="text-sm font-semibold text-white">Purpose</p>
+                  <p className="mt-3 text-sm leading-7 text-slate-300">
+                    Give the project a memorable identity and a clear first impression.
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-5">
+                  <p className="text-sm font-semibold text-white">Tone</p>
+                  <p className="mt-3 text-sm leading-7 text-slate-300">
+                    Calm, cosmic, premium, and builder-friendly.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-5">
+              {principles.map((item) => (
+                <PrincipleCard key={item.title} item={item} />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="roadmap" className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
+          <SectionHeading
+            eyebrow="Roadmap"
+            title="A landing page that can grow with the project"
+            description="The structure below is a useful staging area for future pages, docs, demos, governance notes, or builder onboarding."
+          />
+
+          <div className="mt-14 grid gap-5 lg:grid-cols-2">
+            {roadmap.map((item) => (
+              <RoadmapCard
+                key={item.phase}
+                phase={item.phase}
+                title={item.title}
+                body={item.body}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
+          <div className="rounded-[2rem] border border-cyan-300/20 bg-gradient-to-br from-cyan-300/10 via-fuchsia-300/10 to-amber-200/10 p-8 shadow-2xl shadow-black/20">
+            <div className="grid items-center gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.35em] text-cyan-200">
+                  Call to action
+                </p>
+                <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                  Make the first impression memorable
+                </h2>
+                <p className="mt-5 max-w-2xl text-base leading-8 text-slate-200">
+                  This landing page can become the public face of the project:
+                  a place to explain the vision, show the architecture, and guide
+                  users to the next meaningful step.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                <a
+                  href="https://github.com/lucylow/logos_heraclitus_cosmic_principle"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 font-semibold text-slate-950 transition hover:bg-cyan-100"
+                >
+                  Open repository
+                  <Github className="h-4 w-4" />
+                </a>
+                <a
+                  href="#faq"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-black/20 px-6 py-3.5 font-semibold text-white transition hover:bg-black/30"
+                >
+                  Read FAQ
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="faq" className="mx-auto max-w-5xl px-6 py-20 lg:px-8">
+          <SectionHeading
+            eyebrow="FAQ"
+            title="Useful answers for visitors"
+            description="These quick answers make the page feel complete and help reduce uncertainty for first-time visitors."
+          />
+
+          <div className="mt-14 space-y-4">
+            {faqs.map((faq) => (
+              <details
+                key={faq.q}
+                className="group rounded-3xl border border-white/10 bg-white/5 p-6"
+              >
+                <summary className="cursor-pointer list-none text-lg font-semibold text-white">
+                  {faq.q}
+                </summary>
+                <p className="mt-4 text-sm leading-7 text-slate-300">{faq.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-white/10 bg-slate-950/80">
+        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-10 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div>
+            <p className="text-sm font-semibold text-white">
+              Logos Heraclitus Cosmic Principle
+            </p>
+            <p className="mt-2 text-sm text-slate-400">
+              A landing page built for clarity, atmosphere, and builder trust.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href="#top"
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
+            >
+              Back to top
+            </a>
+            <a
+              href="https://github.com/lucylow/logos_heraclitus_cosmic_principle"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
+            >
+              GitHub
+            </a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+
+src/main.tsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+
+src/index.css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: #020617;
+  color: white;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(103, 232, 249, 0.35);
+  color: white;
+}
+
+
+tailwind.config.ts
+import type { Config } from "tailwindcss";
+
+export default {
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  theme: {
+    extend: {
+      boxShadow: {
+        glow: "0 0 60px rgba(34, 211, 238, 0.18)",
+      },
+    },
+  },
+  plugins: [],
+} satisfies Config;
+
+
+vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+});
+
+
+package.json
+{
+  "name": "logos-heraclitus-landing",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "framer-motion": "^11.11.9",
+    "lucide-react": "^0.452.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.9",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.8"
+  }
+}
+
+
+index.html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Logos Heraclitus Cosmic Principle</title>
+    <meta
+      name="description"
+      content="A cosmic, privacy-first landing page for Logos Heraclitus Cosmic Principle."
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
+If you want the landing page adapted to the existing repo structure instead of a fresh React app shell, I can rewrite it into the exact files and folders your project is already using.
+
+

@@ -1,0 +1,164 @@
+Below is a comprehensive ChatGPT prompt designed to produce a **15+ page detailed code document** focused on improving the **User Experience (UX)** of the Logos Heraclitus Cosmic Principle frontend.
+
+Copy the entire prompt block below, paste it into a fresh ChatGPT conversation, and execute. The assistant will follow all instructions to deliver the final output.
+
+```markdown
+# IMPROVING THE USER EXPERIENCE (UX) OF LOGOS HERACLITUS COSMIC PRINCIPLE
+
+You are an expert in **frontend development, blockchain UX, human-computer interaction, and privacy-preserving decentralised applications**. Your task is to produce a **detailed, code‑first technical document** (minimum 15 pages in print) that **dramatically improves the user experience** of the frontend for the Logos Heraclitus Cosmic Principle repository:  
+[https://github.com/lucylow/logos_heraclitus_cosmic_principle](https://github.com/lucylow/logos_heraclitus_cosmic_principle)
+
+The current frontend is **minimal or scattered** and provides a poor user experience — long proof wait times, unclear feedback, no onboarding, etc. Your goal is to **redesign and implement a modern, intuitive, and privacy‑first user interface** that makes the unique capabilities of **Cryptarchia (Private Proof of Stake)** and **Blend (Proposer Anonymity)** accessible and delightful for both technical and non‑technical users.
+
+---
+
+## DELIVERABLES
+
+Produce a **single Markdown document** with the following sections:
+
+1. **Executive Summary** (max 2 pages)  
+   - Existing UX pain points (long delays, opaque errors, missing onboarding).  
+   - High‑level vision for the improved UX.  
+   - List of **five core UX improvements** you will implement.
+
+2. **UX Principles & Design Philosophy** (1 page)  
+   - Privacy by default.  
+   - Transparency without deanonymisation.  
+   - Progressive disclosure (simple → advanced).  
+   - Clear feedback loops for long‑running operations (proof generation).
+
+3. **Architecture & Technology Stack** (2–3 pages)  
+   - Framework: **Next.js 14** (App Router) with TypeScript.  
+   - Styling: **Tailwind CSS** + **shadcn/ui** component library.  
+   - State management: **Zustand**.  
+   - Communication with the Logos node: **WebSockets (JSON‑RPC 2.0)** for real‑time updates, plus HTTP fallback.  
+   - Wallet connection: **Logos Basecamp SDK** or custom key manager.  
+   - Decoding of on‑chain data: **SPEL** framework (fetch & decode account data).  
+   - Provide a complete **dependency graph** and a **folder structure**.
+
+4. **Detailed Code & Explanations** (13+ pages)  
+
+   For **each** of the five core UX improvements below, provide:  
+   - Rationale (2–3 sentences).  
+   - **Complete, runnable code** (React components, hooks, TypeScript types, API routes).  
+   - Integration instructions (how to plug into the existing repository’s build system).  
+   - A screenshot / ASCII mockup of the UI element.
+
+   **Core UX improvements to implement (choose all five):**
+
+   - **A. Onboarding Wizard** – A guided step‑by‑step process for first‑time users:
+        - Create or import a shielded wallet.
+        - Connect to the Logos network (discover peers automatically).
+        - Stake tokens (with clear visual feedback on commitment and nullifier).
+        - Educate the user about anonymity concepts (explainers on Cryptarchia and Blend).
+        - **Code**: `components/OnboardingWizard.tsx`, `components/PrivacyExplainer.tsx`, `hooks/useFirstTimeUser.ts`, API routes for wallet creation.
+
+   - **B. Real‑time Network & Consensus Dashboard** – A live dashboard that visualises Cryptarchia & Blend activity **without** revealing identities:
+        - Live block height and slot progression (timestamp).
+        - Lottery difficulty (adjusted every epoch) shown as an intuitive gauge.
+        - Visual representation of the mixnet (onion encrypted path of a dummy proposal).
+        - Cover traffic activity (dummy messages per second) represented as a liveliness chart.
+        - Anonymity set size estimation (K‑anonymity level) displayed as a trust metric.
+        - **Code**: `components/Dashboard.tsx`, `components/BlockTimeline.tsx`, `components/MixnetVisualizer.tsx`, `hooks/useWebSocket.ts`.
+
+   - **C. Transaction Builder with Proof Progress** – A transaction flow that handles long‑running ZK proof generation gracefully:
+        - Step‑by‑step card for creating a shielded transfer: select input notes → specify recipient (blinded address) → amount.
+        - Visual progress bar for proof generation (with ETA estimation).
+        - Background proof generation (user can continue browsing).
+        - Queue multiple transactions and show status indicators.
+        - Offline fallback (if node is down, show queued transactions).
+        - **Code**: `components/TransactionBuilder.tsx`, `components/ProofProgress.tsx`, `lib/transactionQueue.ts`.
+
+   - **D. Privacy‑Aware Notification System** – A notification centre that respects user privacy:
+        - In‑app notifications (no external tracking) for transaction confirmations, stake maturity, lottery results (without revealing identity).
+        - Ability to create custom alerts (e.g., “notify me when my note is spent”).
+        - Privacy‑preserving push using Waku (if available) – fallback to polling.
+        - **Code**: `components/NotificationCenter.tsx`, `hooks/useNotifications.ts`, `lib/alertEngine.ts`.
+
+   - **E. Accessibility & Dark Mode** – A polished UI that works for all users:
+        - Full dark/light theme with system preference detection.
+        - Keyboard navigation (WCAG 2.1 AA compliant).
+        - Screen reader support (ARIA labels, semantic HTML).
+        - High contrast mode.
+        - **Code**: `components/ThemeProvider.tsx`, `components/AccessibilityMenu.tsx`, `app/layout.tsx` (with theming).
+
+5. **Integration Checklist** (1 page)  
+   - Step‑by‑step instructions to integrate the new UI into the existing repository.  
+   - List of environment variables (e.g., `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_WS_URL`, `NEXT_PUBLIC_SPELBOOK_URL`).  
+   - Instructions for running the development server and building for production.
+
+6. **UX Testing & Performance Benchmarks** (1 page)  
+   - Describe how to conduct usability tests (include a script).  
+   - Measure key metrics: Time to First Transaction, Proof Wait Time Feedback Success Rate, User Error Rate.  
+   - Provide a Lighthouse performance report (projected scores).
+
+7. **Security & Privacy Checklist** (1 page)  
+   - How private keys are handled (never leave the browser, encrypted storage).  
+   - Protection against XSS, CSRF, clickjacking.  
+   - Meta‑data minimisation (no Google Analytics, no third‑party fonts).  
+   - How the UI prevents timing attacks (e.g., no logging of node IDs).
+
+---
+
+## TECHNICAL CONSTRAINTS
+
+- **All code must be runnable** – no placeholders like `…` (except for very long repetitive blocks such as CSS).  
+- **Use modern React patterns** – functional components, hooks, context providers.  
+- **Communicate with the Logos node** via the existing RPC interface. Assume it exposes:  
+  - HTTP JSON‑RPC on `http://localhost:8545`  
+  - WebSocket on `ws://localhost:8546`  
+- **Type Safety** – Provide full TypeScript definitions for all RPC responses, especially for Cryptarchia‑specific messages (e.g., `SlotInfo`, `LotteryTicket`, `ProofOfLeadership`).  
+- **Use the SPEL framework** to decode on‑chain account data – show an example of calling `spel inspect` from the UI.  
+- **Local Development** – Include a `docker-compose.frontend.yml` that runs a mock node for testing.  
+- **No external analytics or tracking scripts** – the UI must respect Logos’s privacy ethos.
+
+---
+
+## EXAMPLE CODE BLOCK (to set the standard)
+
+```tsx
+// components/ProofProgress.tsx
+"use client";
+import { useEffect, useState } from "react";
+import { Progress } from "@/components/ui/progress";
+
+interface ProofProgressProps {
+  taskId: string;
+  estimatedTimeSec: number;
+}
+
+export function ProofProgress({ taskId, estimatedTimeSec }: ProofProgressProps) {
+  const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsed(prev => {
+        const newElapsed = prev + 0.1;
+        const newProgress = Math.min(100, (newElapsed / estimatedTimeSec) * 100);
+        setProgress(newProgress);
+        return newElapsed;
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, [estimatedTimeSec]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between text-sm">
+        <span>Generating zero‑knowledge proof for ID {taskId}...</span>
+        <span>{Math.round(progress)}%</span>
+      </div>
+      <Progress value={progress} className="w-full" />
+    </div>
+  );
+}
+```
+
+---
+
+Now, write the document. Ensure the final output is at least **15 pages** (approximately 5000–7000 words of text plus code). Use clear Markdown headings, code fences, and bullet points. Prioritise code that is **directly usable** in a Next.js project.
+```
+
+This prompt ensures that the AI will deliver a comprehensive, actionable plan for transforming the frontend into a professional, user‑friendly application. The focus on code and actionable improvements directly addresses the user's request for a detailed technical document.
+

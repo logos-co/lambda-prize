@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "crates/lez-events",
+    "crates/lez-events-cli",
+    "crates/lez-privacy",
+    "crates/cryptarchia-lll",
+    "crates/cryptarchia-lll-cli",
+    "crates/lez-blend",
+    "programs/event-demo",
+    "programs/private-token-demo",
+]
+resolver = "2"

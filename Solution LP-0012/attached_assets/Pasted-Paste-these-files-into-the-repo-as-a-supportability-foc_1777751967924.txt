@@ -1,0 +1,1594 @@
+Paste these files into the repo as a supportability-focused expansion. It adds structured diagnostics, richer error context, health checks, support bundles, file-based traces, and CLI commands that make failures easier to understand and reproduce.
+# Cargo.toml (workspace root)
+[workspace]
+members = [
+  "crates/lez-events",
+  "crates/lez-events-cli",
+  "programs/event-demo",
+]
+
+resolver = "2"
+
+# crates/lez-events/Cargo.toml
+[package]
+name = "lez-events"
+version = "0.6.0"
+edition = "2021"
+description = "Supportability-focused SDK and diagnostics for structured LEZ events"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = []
+std = ["serde", "serde_json", "hex"]
+encryption = ["aes-gcm"]
+test-stub = []
+
+[dependencies]
+borsh = { version = "1", default-features = false, features = ["derive"] }
+hex = { version = "0.4", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+aes-gcm = { version = "0.10", optional = true }
+sha2 = { version = "0.10", default-features = false }
+thiserror = "2"
+
+[dev-dependencies]
+borsh = { version = "1", features = ["derive"] }
+hex = "0.4"
+serde_json = "1"
+tempfile = "3"
+
+[[test]]
+name = "diagnostics"
+path = "tests/diagnostics.rs"
+required-features = ["test-stub"]
+
+// crates/lez-events/src/lib.rs
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use borsh::BorshSerialize;
+
+pub mod bundle;
+pub mod decoder;
+pub mod diagnostics;
+pub mod errors;
+pub mod health;
+pub mod schema;
+pub mod support;
+
+#[cfg(feature = "std")]
+pub mod runtime;
+
+#[cfg(feature = "std")]
+pub mod rpc;
+
+pub use bundle::{Bundle, BundleEntry, BundleKind};
+pub use decoder::{decode_envelope, decode_hex_envelope, DecodedEnvelope};
+pub use diagnostics::{DiagnosticLevel, DiagnosticRecord, DiagnosticReport, SupportContext};
+pub use errors::{CliError, EventError, EventResult};
+pub use health::{HealthCheck, HealthStatus};
+pub use schema::{event_discriminant, EventSchema};
+pub use support::{
+    build_support_bundle, capture_support_context, render_support_report, SupportBundleConfig,
+    SupportBundleWriter, SupportCommand,
+};
+
+pub const EVENT_VERSION: u8 = 0x00;
+pub const MAX_EVENT_SIZE: usize = 64 * 1024;
+pub const MAX_TX_EVENT_BYTES: usize = 1024 * 1024;
+pub const MAX_EVENTS_PER_TX: usize = 256;
+
+#[cfg(not(any(test, feature = "test-stub")))]
+extern "C" {
+    fn sys_emit_event(ptr: *const u8, len: usize) -> i32;
+}
+
+#[cfg(feature = "test-stub")]
+#[no_mangle]
+pub extern "C" fn sys_emit_event(_ptr: *const u8, _len: usize) -> i32 {
+    0
+}
+
+#[cfg(not(any(test, feature = "test-stub")))]
+pub unsafe fn __sys_emit_event(ptr: *const u8, len: usize) -> i32 {
+    sys_emit_event(ptr, len)
+}
+
+#[cfg(any(test, feature = "test-stub"))]
+pub unsafe fn __sys_emit_event(_ptr: *const u8, _len: usize) -> i32 {
+    0
+}
+
+pub fn fnv1a_32(name: &str) -> [u8; 4] {
+    let mut h: u32 = 0x811c9dc5;
+    for b in name.as_bytes() {
+        h ^= *b as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    }
+    h.to_le_bytes()
+}
+
+pub fn encode_event<E: EventSchema>(event: &E) -> EventResult<Vec<u8>> {
+    let payload = borsh::to_vec(event).map_err(|_| EventError::SerializationFailed)?;
+    if payload.len() > MAX_EVENT_SIZE {
+        return Err(EventError::EventTooLarge {
+            size: payload.len(),
+            limit: MAX_EVENT_SIZE,
+        });
+    }
+
+    let mut out = Vec::with_capacity(1 + 4 + payload.len());
+    out.push(EVENT_VERSION);
+    out.extend_from_slice(&E::discriminant());
+    out.extend_from_slice(&payload);
+    Ok(out)
+}
+
+pub fn emit<E: EventSchema>(event: &E) -> EventResult<()> {
+    let bytes = encode_event(event)?;
+    let rc = unsafe { __sys_emit_event(bytes.as_ptr(), bytes.len()) };
+    match rc {
+        0 => Ok(()),
+        -1 => Err(EventError::TxBudgetExceeded {
+            used: 0,
+            added: bytes.len(),
+            limit: MAX_TX_EVENT_BYTES,
+        }),
+        -2 => Err(EventError::TxCountExceeded {
+            used: 0,
+            limit: MAX_EVENTS_PER_TX,
+        }),
+        code => Err(EventError::SyscallError(code)),
+    }
+}
+
+#[cfg(feature = "encryption")]
+pub fn emit_encrypted<E: EventSchema>(
+    event: &E,
+    key_bytes: &[u8],
+    nonce_bytes: &[u8],
+) -> EventResult<()> {
+    use aes_gcm::{
+        aead::{Aead, KeyInit},
+        Aes256Gcm, Key, Nonce,
+    };
+
+    if key_bytes.len() != 32 {
+        return Err(EventError::InvalidEncryptionKey {
+            expected: 32,
+            found: key_bytes.len(),
+        });
+    }
+    if nonce_bytes.len() != 12 {
+        return Err(EventError::InvalidEncryptionNonce {
+            expected: 12,
+            found: nonce_bytes.len(),
+        });
+    }
+
+    let plaintext = encode_event(event)?;
+    let key = Key::<Aes256Gcm>::from_slice(key_bytes);
+    let nonce = Nonce::from_slice(nonce_bytes);
+    let cipher = Aes256Gcm::new(key);
+
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext.as_ref())
+        .map_err(|_| EventError::EncryptionFailed)?;
+
+    let rc = unsafe { __sys_emit_event(ciphertext.as_ptr(), ciphertext.len()) };
+    match rc {
+        0 => Ok(()),
+        -1 => Err(EventError::TxBudgetExceeded {
+            used: 0,
+            added: ciphertext.len(),
+            limit: MAX_TX_EVENT_BYTES,
+        }),
+        -2 => Err(EventError::TxCountExceeded {
+            used: 0,
+            limit: MAX_EVENTS_PER_TX,
+        }),
+        code => Err(EventError::SyscallError(code)),
+    }
+}
+
+#[macro_export]
+macro_rules! emit_event {
+    ($event:expr) => {
+        $crate::emit(&$event)
+    };
+}
+
+#[cfg(feature = "encryption")]
+#[macro_export]
+macro_rules! emit_encrypted_event {
+    ($event:expr, $key_bytes:expr, $nonce_bytes:expr) => {
+        $crate::emit_encrypted(&$event, $key_bytes, $nonce_bytes)
+    };
+}
+
+pub mod prelude {
+    pub use crate::{
+        bundle::{Bundle, BundleEntry, BundleKind},
+        decode_envelope, decode_hex_envelope, emit, emit_event, encode_event, event_discriminant,
+        render_support_report, capture_support_context, build_support_bundle, DiagnosticLevel,
+        DiagnosticReport, DiagnosticRecord, EventError, EventResult, EventSchema, HealthCheck,
+        HealthStatus, SupportBundleConfig, SupportCommand, SupportContext, EVENT_VERSION,
+        MAX_EVENTS_PER_TX, MAX_EVENT_SIZE, MAX_TX_EVENT_BYTES,
+    };
+
+    #[cfg(feature = "encryption")]
+    pub use crate::emit_encrypted_event;
+}
+
+// crates/lez-events/src/errors.rs
+use alloc::string::{String, ToString};
+
+pub type EventResult<T> = core::result::Result<T, EventError>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EventError {
+    SerializationFailed,
+    EventTooLarge { size: usize, limit: usize },
+    TxBudgetExceeded { used: usize, added: usize, limit: usize },
+    TxCountExceeded { used: usize, limit: usize },
+    InvalidEnvelope(String),
+    InvalidVersion(u8),
+    InvalidEncryptionKey { expected: usize, found: usize },
+    InvalidEncryptionNonce { expected: usize, found: usize },
+    InvalidHex(String),
+    InvalidProgramId(String),
+    InvalidTxHash(String),
+    MissingField(&'static str),
+    UnsupportedFormat(String),
+    EncryptionFailed,
+    Io(String),
+    Rpc(String),
+    SyscallError(i32),
+}
+
+impl core::fmt::Display for EventError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::SerializationFailed => f.write_str("failed to serialize event"),
+            Self::EventTooLarge { size, limit } => {
+                write!(f, "event too large: {size} bytes exceeds {limit} bytes")
+            }
+            Self::TxBudgetExceeded { used, added, limit } => {
+                write!(f, "event budget exceeded: {used} + {added} > {limit}")
+            }
+            Self::TxCountExceeded { used, limit } => {
+                write!(f, "event count exceeded: {used} >= {limit}")
+            }
+            Self::InvalidEnvelope(msg) => write!(f, "invalid envelope: {msg}"),
+            Self::InvalidVersion(v) => write!(f, "unsupported event version: {v}"),
+            Self::InvalidEncryptionKey { expected, found } => {
+                write!(f, "invalid encryption key length: expected {expected}, found {found}")
+            }
+            Self::InvalidEncryptionNonce { expected, found } => {
+                write!(f, "invalid encryption nonce length: expected {expected}, found {found}")
+            }
+            Self::InvalidHex(s) => write!(f, "invalid hex string: {s}"),
+            Self::InvalidProgramId(s) => write!(f, "invalid program id: {s}"),
+            Self::InvalidTxHash(s) => write!(f, "invalid transaction hash: {s}"),
+            Self::MissingField(name) => write!(f, "missing required field: {name}"),
+            Self::UnsupportedFormat(fmt) => write!(f, "unsupported output format: {fmt}"),
+            Self::EncryptionFailed => f.write_str("event encryption failed"),
+            Self::Io(s) => write!(f, "i/o error: {s}"),
+            Self::Rpc(s) => write!(f, "rpc error: {s}"),
+            Self::SyscallError(code) => write!(f, "syscall returned error code {code}"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for EventError {}
+
+pub type CliError = EventError;
+
+// crates/lez-events/src/schema.rs
+use borsh::BorshSerialize;
+
+pub trait EventSchema: BorshSerialize {
+    const NAME: &'static str;
+
+    fn discriminant() -> [u8; 4] {
+        crate::fnv1a_32(Self::NAME)
+    }
+
+    fn event_name() -> &'static str {
+        Self::NAME
+    }
+}
+
+pub fn event_discriminant(name: &str) -> [u8; 4] {
+    crate::fnv1a_32(name)
+}
+
+// crates/lez-events/src/diagnostics.rs
+#![cfg_attr(not(feature = "std"), no_std)]
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DiagnosticLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl DiagnosticLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Trace => "trace",
+            Self::Debug => "debug",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DiagnosticRecord {
+    pub level: DiagnosticLevel,
+    pub component: String,
+    pub message: String,
+    pub detail: Option<String>,
+    pub code: Option<String>,
+}
+
+impl DiagnosticRecord {
+    pub fn new(
+        level: DiagnosticLevel,
+        component: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            level,
+            component: component.into(),
+            message: message.into(),
+            detail: None,
+            code: None,
+        }
+    }
+
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    pub fn with_code(mut self, code: impl Into<String>) -> Self {
+        self.code = Some(code.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DiagnosticReport {
+    pub title: String,
+    pub summary: String,
+    pub records: Vec<DiagnosticRecord>,
+}
+
+impl DiagnosticReport {
+    pub fn new(title: impl Into<String>, summary: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            summary: summary.into(),
+            records: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, record: DiagnosticRecord) {
+        self.records.push(record);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SupportContext {
+    pub command: String,
+    pub rpc_url: Option<String>,
+    pub tx_hash: Option<String>,
+    pub program_id: Option<String>,
+    pub receipt_path: Option<String>,
+    pub config_path: Option<String>,
+    pub rust_version: Option<String>,
+    pub target: Option<String>,
+}
+
+impl SupportContext {
+    pub fn empty(command: impl Into<String>) -> Self {
+        Self {
+            command: command.into(),
+            rpc_url: None,
+            tx_hash: None,
+            program_id: None,
+            receipt_path: None,
+            config_path: None,
+            rust_version: None,
+            target: None,
+        }
+    }
+}
+
+// crates/lez-events/src/health.rs
+use alloc::string::String;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HealthStatus {
+    Healthy,
+    Degraded,
+    Unhealthy,
+}
+
+impl HealthStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Healthy => "healthy",
+            Self::Degraded => "degraded",
+            Self::Unhealthy => "unhealthy",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HealthCheck {
+    pub name: String,
+    pub status: HealthStatus,
+    pub message: String,
+    pub remediation: Option<String>,
+}
+
+impl HealthCheck {
+    pub fn healthy(name: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            status: HealthStatus::Healthy,
+            message: message.into(),
+            remediation: None,
+        }
+    }
+
+    pub fn degraded(
+        name: impl Into<String>,
+        message: impl Into<String>,
+        remediation: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            status: HealthStatus::Degraded,
+            message: message.into(),
+            remediation: Some(remediation.into()),
+        }
+    }
+
+    pub fn unhealthy(
+        name: impl Into<String>,
+        message: impl Into<String>,
+        remediation: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            status: HealthStatus::Unhealthy,
+            message: message.into(),
+            remediation: Some(remediation.into()),
+        }
+    }
+}
+
+// crates/lez-events/src/bundle.rs
+use alloc::string::String;
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+
+use crate::{DiagnosticReport, HealthCheck, SupportContext};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BundleKind {
+    Support,
+    Diagnostics,
+    Health,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BundleEntry {
+    pub name: String,
+    pub kind: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Bundle {
+    pub kind: BundleKind,
+    pub context: SupportContext,
+    pub diagnostics: Option<DiagnosticReport>,
+    pub health: Vec<HealthCheck>,
+    pub entries: Vec<BundleEntry>,
+}
+
+impl Bundle {
+    pub fn new(kind: BundleKind, context: SupportContext) -> Self {
+        Self {
+            kind,
+            context,
+            diagnostics: None,
+            health: Vec::new(),
+            entries: Vec::new(),
+        }
+    }
+
+    pub fn push_entry(
+        &mut self,
+        name: impl Into<String>,
+        kind: impl Into<String>,
+        content: impl Into<String>,
+    ) {
+        self.entries.push(BundleEntry {
+            name: name.into(),
+            kind: kind.into(),
+            content: content.into(),
+        });
+    }
+
+    pub fn set_diagnostics(&mut self, diagnostics: DiagnosticReport) {
+        self.diagnostics = Some(diagnostics);
+    }
+
+    pub fn push_health(&mut self, item: HealthCheck) {
+        self.health.push(item);
+    }
+}
+
+// crates/lez-events/src/support.rs
+#![cfg(feature = "std")]
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use serde::{Deserialize, Serialize};
+use std::{
+    env,
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use crate::{
+    bundle::{Bundle, BundleKind},
+    diagnostics::{DiagnosticLevel, DiagnosticRecord, DiagnosticReport, SupportContext},
+    health::{HealthCheck, HealthStatus},
+    receipt::ReceiptEnvelope,
+    EventError,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SupportBundleConfig {
+    pub include_env: bool,
+    pub include_receipt: bool,
+    pub include_health: bool,
+    pub include_diagnostics: bool,
+    pub max_env_vars: usize,
+}
+
+impl Default for SupportBundleConfig {
+    fn default() -> Self {
+        Self {
+            include_env: true,
+            include_receipt: true,
+            include_health: true,
+            include_diagnostics: true,
+            max_env_vars: 64,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SupportBundleWriter {
+    output_dir: PathBuf,
+}
+
+impl SupportBundleWriter {
+    pub fn new(output_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            output_dir: output_dir.into(),
+        }
+    }
+
+    fn timestamp() -> String {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        format!("{}", now.as_secs())
+    }
+
+    pub fn write_bundle(&self, bundle: &Bundle) -> Result<PathBuf, EventError> {
+        fs::create_dir_all(&self.output_dir).map_err(|e| EventError::Io(e.to_string()))?;
+        let file = self.output_dir.join(format!(
+            "{}-{:?}-support.json",
+            Self::timestamp(),
+            bundle.kind
+        ));
+        let raw = serde_json::to_string_pretty(bundle).map_err(|e| EventError::Io(e.to_string()))?;
+        fs::write(&file, raw).map_err(|e| EventError::Io(e.to_string()))?;
+        Ok(file)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SupportCommand {
+    pub command: String,
+    pub rpc_url: Option<String>,
+    pub tx_hash: Option<String>,
+    pub program_id: Option<String>,
+    pub receipt_path: Option<String>,
+    pub config_path: Option<String>,
+}
+
+impl SupportCommand {
+    pub fn to_context(&self) -> SupportContext {
+        SupportContext {
+            command: self.command.clone(),
+            rpc_url: self.rpc_url.clone(),
+            tx_hash: self.tx_hash.clone(),
+            program_id: self.program_id.clone(),
+            receipt_path: self.receipt_path.clone(),
+            config_path: self.config_path.clone(),
+            rust_version: rustc_version(),
+            target: Some(std::env::consts::TARGET.to_string()),
+        }
+    }
+}
+
+pub fn capture_support_context(command: impl Into<String>) -> SupportContext {
+    SupportContext {
+        command: command.into(),
+        rpc_url: None,
+        tx_hash: None,
+        program_id: None,
+        receipt_path: None,
+        config_path: None,
+        rust_version: rustc_version(),
+        target: Some(std::env::consts::TARGET.to_string()),
+    }
+}
+
+pub fn render_support_report(bundle: &Bundle) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("Support bundle kind: {:?}\n", bundle.kind));
+    out.push_str(&format!("Command: {}\n", bundle.context.command));
+
+    if let Some(ref url) = bundle.context.rpc_url {
+        out.push_str(&format!("RPC: {}\n", url));
+    }
+    if let Some(ref tx) = bundle.context.tx_hash {
+        out.push_str(&format!("Tx: {}\n", tx));
+    }
+    if let Some(ref pid) = bundle.context.program_id {
+        out.push_str(&format!("Program: {}\n", pid));
+    }
+    if let Some(ref rp) = bundle.context.receipt_path {
+        out.push_str(&format!("Receipt: {}\n", rp));
+    }
+
+    if let Some(ref diag) = bundle.diagnostics {
+        out.push_str(&format!("\nDiagnostics: {}\n", diag.title));
+        for r in &diag.records {
+            out.push_str(&format!(
+                "- [{}] {}: {}\n",
+                r.level.as_str(),
+                r.component,
+                r.message
+            ));
+            if let Some(ref d) = r.detail {
+                out.push_str(&format!("  detail: {}\n", d));
+            }
+            if let Some(ref c) = r.code {
+                out.push_str(&format!("  code: {}\n", c));
+            }
+        }
+    }
+
+    if !bundle.health.is_empty() {
+        out.push_str("\nHealth:\n");
+        for h in &bundle.health {
+            out.push_str(&format!(
+                "- {} => {}: {}\n",
+                h.name,
+                h.status.as_str(),
+                h.message
+            ));
+            if let Some(ref remediation) = h.remediation {
+                out.push_str(&format!("  remediation: {}\n", remediation));
+            }
+        }
+    }
+
+    out
+}
+
+pub fn build_support_bundle(
+    cfg: &SupportBundleConfig,
+    context: SupportContext,
+    receipt: Option<&ReceiptEnvelope>,
+) -> Bundle {
+    let mut bundle = Bundle::new(BundleKind::Support, context);
+
+    if cfg.include_diagnostics {
+        let mut diag = DiagnosticReport::new("Support diagnostics", "support report generated");
+        diag.push(
+            DiagnosticRecord::new(DiagnosticLevel::Info, "support", "bundle created")
+                .with_detail("baseline support bundle assembled"),
+        );
+        bundle.set_diagnostics(diag);
+    }
+
+    if cfg.include_health {
+        bundle.push_health(HealthCheck::healthy(
+            "config",
+            "configuration loaded and parsed successfully",
+        ));
+
+        if let Some(receipt) = receipt {
+            if receipt.validate().is_ok() {
+                bundle.push_health(HealthCheck::healthy(
+                    "receipt",
+                    "receipt structure passed validation",
+                ));
+            } else {
+                bundle.push_health(HealthCheck::unhealthy(
+                    "receipt",
+                    "receipt structure failed validation",
+                    "re-download or regenerate the receipt file",
+                ));
+            }
+        } else {
+            bundle.push_health(HealthCheck::degraded(
+                "receipt",
+                "no receipt was supplied",
+                "provide --file receipt.json or --tx <hash>",
+            ));
+        }
+    }
+
+    if cfg.include_receipt {
+        if let Some(receipt) = receipt {
+            bundle.push_entry("receipt", "json", serde_json::to_string_pretty(receipt).unwrap_or_default());
+        }
+    }
+
+    if cfg.include_env {
+        let mut count = 0usize;
+        for (k, v) in env::vars() {
+            if count >= cfg.max_env_vars {
+                break;
+            }
+            bundle.push_entry(
+                format!("env-{k}"),
+                "env",
+                format!("{k}={v}"),
+            );
+            count += 1;
+        }
+    }
+
+    bundle
+}
+
+fn rustc_version() -> Option<String> {
+    option_env!("RUSTC_VERSION").map(|s| s.to_string())
+}
+
+# crates/lez-events-cli/Cargo.toml
+[package]
+name = "lez-events-cli"
+version = "0.6.0"
+edition = "2021"
+description = "Supportability-focused CLI for LEZ event inspection and troubleshooting"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "lez-events"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+hex = "0.4"
+lez-events = { path = "../lez-events", features = ["std", "encryption"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+// crates/lez-events-cli/src/main.rs
+mod commands;
+mod config;
+mod format;
+mod prompts;
+
+use anyhow::Result;
+use clap::Parser;
+use commands::CommandLine;
+use config::resolve_config;
+
+fn main() -> Result<()> {
+    let cli = CommandLine::parse();
+    let cfg = resolve_config(&cli)?;
+    commands::run(cli, cfg)
+}
+
+// crates/lez-events-cli/src/config.rs
+use anyhow::{Context, Result};
+use lez_events::{AppConfig, CliConfig, OutputFormat};
+use std::{env, fs, path::PathBuf};
+
+use crate::commands::CommandLine;
+
+pub fn resolve_config(cli: &CommandLine) -> Result<CliConfig> {
+    let mut cfg = if let Some(path) = cli.config.as_ref() {
+        load_config_file(path)?
+    } else if let Ok(path) = env::var("LEZ_EVENTS_CONFIG") {
+        load_config_file(PathBuf::from(path))?
+    } else {
+        CliConfig::default()
+    };
+
+    if let Some(rpc) = cli.rpc_url.as_ref() {
+        cfg.rpc_url = rpc.clone();
+    }
+
+    if cli.json {
+        cfg.output = OutputFormat::Json;
+    }
+    if cli.jsonl {
+        cfg.output = OutputFormat::JsonLines;
+    }
+    if cli.pretty {
+        cfg.output = OutputFormat::Pretty;
+    }
+
+    if cli.no_color {
+        cfg.color = false;
+    }
+    if cli.strict {
+        cfg.strict = true;
+    }
+    if cli.follow {
+        cfg.follow = true;
+    }
+
+    cfg.validate().context("invalid configuration")?;
+    Ok(cfg)
+}
+
+fn load_config_file(path: PathBuf) -> Result<CliConfig> {
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read config file {}", path.display()))?;
+    let app = AppConfig::from_toml_str(&raw)
+        .with_context(|| format!("failed to parse config file {}", path.display()))?;
+    app.validate().context("configuration failed validation")?;
+    Ok(app.cli)
+}
+
+// crates/lez-events-cli/src/format.rs
+use anyhow::Result;
+use lez_events::{DecodedReceipt, OutputFormat};
+
+pub fn render_receipt(receipt: &DecodedReceipt, format: OutputFormat) -> Result<String> {
+    match format {
+        OutputFormat::Pretty => Ok(serde_json::to_string_pretty(receipt)?),
+        OutputFormat::Json => Ok(serde_json::to_string(receipt)?),
+        OutputFormat::JsonLines => Ok(serde_json::to_string(receipt)?),
+    }
+}
+
+pub fn render_error(err: &dyn std::error::Error) -> String {
+    let mut out = err.to_string();
+    let mut source = err.source();
+    while let Some(next) = source {
+        out.push_str("\n  caused by: ");
+        out.push_str(&next.to_string());
+        source = next.source();
+    }
+    out
+}
+
+// crates/lez-events-cli/src/prompts.rs
+use anyhow::Result;
+use std::io::{self, Read};
+
+pub fn read_stdin_all() -> Result<String> {
+    let mut buf = String::new();
+    io::stdin().read_to_string(&mut buf)?;
+    Ok(buf)
+}
+
+// crates/lez-events-cli/src/commands.rs
+use anyhow::{Context, Result};
+use clap::{Args, Parser, Subcommand};
+use lez_events::{
+    atomic_write_json, build_support_bundle, capture_support_context, checksum_hex, decode_hex_envelope,
+    human_bytes, human_hex_preview, retry, validate_event_bytes, validate_program_id,
+    validate_tx_hash, AppConfig, CliConfig, DecodedEnvelope, DecodedReceipt, DiagnosticLevel,
+    DiagnosticRecord, DiagnosticReport, EventError, EventIndex, EventIndexQuery, HealthCheck,
+    ReceiptEnvelope, ReceiptStatus, RetryConfig, SupportBundleConfig, SupportBundleWriter,
+    SupportCommand,
+};
+use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    time::Duration,
+};
+
+use crate::{format, prompts};
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "lez-events",
+    version,
+    about = "Supportability-first tooling for LEZ receipts and event data"
+)]
+pub struct CommandLine {
+    #[arg(long, global = true, env = "LEZ_EVENTS_CONFIG")]
+    pub config: Option<PathBuf>,
+
+    #[arg(long, global = true, env = "LEZ_EVENTS_RPC_URL")]
+    pub rpc_url: Option<String>,
+
+    #[arg(long, global = true)]
+    pub pretty: bool,
+
+    #[arg(long, global = true)]
+    pub json: bool,
+
+    #[arg(long, global = true)]
+    pub jsonl: bool,
+
+    #[arg(long, global = true)]
+    pub no_color: bool,
+
+    #[arg(long, global = true)]
+    pub strict: bool,
+
+    #[arg(long, global = true)]
+    pub follow: bool,
+
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    Decode(DecodeArgs),
+    Inspect(InspectArgs),
+    Validate(ValidateArgs),
+    InitConfig(InitConfigArgs),
+    Index(IndexArgs),
+    Query(QueryArgs),
+    Example(ExampleArgs),
+    Doctor(DoctorArgs),
+    Bundle(BundleArgs),
+    Health(HealthArgs),
+    ExplainError(ExplainErrorArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct DecodeArgs {
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+
+    #[arg(long)]
+    pub stdin: bool,
+
+    #[arg(long)]
+    pub tx: Option<String>,
+
+    #[arg(long)]
+    pub rpc: Option<String>,
+
+    #[arg(long)]
+    pub types: Vec<String>,
+
+    #[arg(long)]
+    pub raw: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct InspectArgs {
+    #[arg(long)]
+    pub file: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct ValidateArgs {
+    #[arg(long)]
+    pub tx_hash: Option<String>,
+
+    #[arg(long)]
+    pub program_id: Option<String>,
+
+    #[arg(long)]
+    pub event_hex: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct InitConfigArgs {
+    #[arg(long, default_value = "lez-events.toml")]
+    pub out: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct IndexArgs {
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+
+    #[arg(long, default_value = "events.json")]
+    pub out: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct QueryArgs {
+    #[arg(long, default_value = "events.json")]
+    pub file: PathBuf,
+
+    #[arg(long)]
+    pub tx_hash: Option<String>,
+
+    #[arg(long)]
+    pub status: Option<String>,
+
+    #[arg(long)]
+    pub type_name: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ExampleArgs {
+    #[arg(long, default_value = "success")]
+    pub kind: String,
+}
+
+#[derive(Args, Debug)]
+pub struct DoctorArgs {
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct BundleArgs {
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+
+    #[arg(long, default_value = "support-bundles")]
+    pub out_dir: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct HealthArgs {
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct ExplainErrorArgs {
+    #[arg(long)]
+    pub code: Option<String>,
+
+    #[arg(long)]
+    pub message: Option<String>,
+}
+
+pub fn run(cli: CommandLine, cfg: CliConfig) -> Result<()> {
+    match cli.command {
+        Command::Decode(args) => decode_command(args, cfg),
+        Command::Inspect(args) => inspect_command(args, cfg),
+        Command::Validate(args) => validate_command(args, cfg),
+        Command::InitConfig(args) => init_config_command(args, cfg),
+        Command::Index(args) => index_command(args, cfg),
+        Command::Query(args) => query_command(args, cfg),
+        Command::Example(args) => example_command(args, cfg),
+        Command::Doctor(args) => doctor_command(args, cfg),
+        Command::Bundle(args) => bundle_command(args, cfg),
+        Command::Health(args) => health_command(args, cfg),
+        Command::ExplainError(args) => explain_error_command(args, cfg),
+    }
+}
+
+fn decode_command(args: DecodeArgs, cfg: CliConfig) -> Result<()> {
+    let receipt = load_receipt_envelope(&args, &cfg)?;
+    let decoded = decode_receipt(&receipt, &args)?;
+    let output = format::render_receipt(&decoded, cfg.output)?;
+    println!("{output}");
+    Ok(())
+}
+
+fn inspect_command(args: InspectArgs, cfg: CliConfig) -> Result<()> {
+    let raw = fs::read_to_string(&args.file)
+        .with_context(|| format!("failed to read {}", args.file.display()))?;
+    let envelope: ReceiptEnvelope = serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse {}", args.file.display()))?;
+
+    envelope.validate().context("receipt failed validation")?;
+
+    let summary = serde_json::json!({
+        "tx_hash": envelope.tx_hash,
+        "status": envelope.status,
+        "error": envelope.error,
+        "state_root": envelope.state_root,
+        "event_count": envelope.events.len(),
+        "total_event_chars": envelope.total_hex_chars(),
+    });
+
+    match cfg.output {
+        lez_events::OutputFormat::Pretty => println!("{}", serde_json::to_string_pretty(&summary)?),
+        lez_events::OutputFormat::Json | lez_events::OutputFormat::JsonLines => {
+            println!("{}", serde_json::to_string(&summary)?)
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_command(args: ValidateArgs, _cfg: CliConfig) -> Result<()> {
+    if let Some(tx) = args.tx_hash {
+        validate_tx_hash(&tx).map_err(anyhow::Error::from)?;
+        println!("tx hash is valid");
+    }
+    if let Some(pid) = args.program_id {
+        validate_program_id(&pid).map_err(anyhow::Error::from)?;
+        println!("program id is valid");
+    }
+    if let Some(hex) = args.event_hex {
+        validate_event_bytes(&hex::decode(hex.trim_start_matches("0x"))?)
+            .map_err(anyhow::Error::from)?;
+        println!("event bytes are valid");
+    }
+    Ok(())
+}
+
+fn init_config_command(args: InitConfigArgs, cfg: CliConfig) -> Result<()> {
+    let app = AppConfig { cli: cfg };
+    atomic_write_json(&args.out, &app)?;
+    println!("wrote config template to {}", args.out.display());
+    Ok(())
+}
+
+fn index_command(args: IndexArgs, _cfg: CliConfig) -> Result<()> {
+    let input = if let Some(path) = args.file {
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?
+    } else {
+        prompts::read_stdin_all()?
+    };
+
+    let receipts: Vec<ReceiptEnvelope> = if input.trim().starts_with('[') {
+        serde_json::from_str(&input)?
+    } else {
+        vec![serde_json::from_str(&input)?]
+    };
+
+    let mut decoded: Vec<DecodedReceipt> = Vec::with_capacity(receipts.len());
+    let mut index = EventIndex::new();
+
+    for receipt in receipts.into_iter() {
+        receipt.validate().context("receipt failed validation")?;
+
+        let parsed_events = receipt
+            .events
+            .iter()
+            .map(|hex| decode_hex_envelope(hex, None))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(anyhow::Error::from)?;
+
+        index.push_receipt(&receipt, &parsed_events);
+
+        decoded.push(DecodedReceipt {
+            tx_hash: receipt.tx_hash,
+            status: receipt.status,
+            error: receipt.error,
+            state_root: receipt.state_root,
+            events: parsed_events,
+        });
+    }
+
+    atomic_write_json(&args.out, &decoded)?;
+    println!("indexed {} receipts into {}", decoded.len(), args.out.display());
+    Ok(())
+}
+
+fn query_command(args: QueryArgs, _cfg: CliConfig) -> Result<()> {
+    let raw = fs::read_to_string(&args.file)
+        .with_context(|| format!("failed to read {}", args.file.display()))?;
+    let rows: Vec<DecodedReceipt> = serde_json::from_str(&raw)?;
+
+    let filtered: Vec<_> = rows
+        .into_iter()
+        .filter(|r| args.tx_hash.as_ref().map_or(true, |wanted| &r.tx_hash == wanted))
+        .filter(|r| args.status.as_ref().map_or(true, |wanted| {
+            format!("{:?}", r.status).to_lowercase() == wanted.to_lowercase()
+        }))
+        .filter(|r| args.type_name.as_ref().map_or(true, |wanted| {
+            r.events.iter().any(|e| e.type_name.as_deref() == Some(wanted))
+        }))
+        .collect();
+
+    println!("{}", serde_json::to_string_pretty(&filtered)?);
+    Ok(())
+}
+
+fn example_command(args: ExampleArgs, _cfg: CliConfig) -> Result<()> {
+    match args.kind.as_str() {
+        "success" => {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "tx_hash": "0xexample",
+                    "status": "success",
+                    "error": null,
+                    "state_root": "0xstate",
+                    "events": ["00deadbeef"]
+                })
+            );
+        }
+        "failure" => {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "tx_hash": "0xexample",
+                    "status": "failed",
+                    "error": "example failure",
+                    "state_root": null,
+                    "events": ["00deadbeef"]
+                })
+            );
+        }
+        other => return Err(EventError::UnsupportedFormat(other.to_string()).into()),
+    }
+    Ok(())
+}
+
+fn doctor_command(args: DoctorArgs) -> Result<()> {
+    if let Some(file) = args.file {
+        let raw = fs::read_to_string(&file)
+            .with_context(|| format!("failed to read {}", file.display()))?;
+        let receipt: ReceiptEnvelope = serde_json::from_str(&raw)
+            .with_context(|| format!("failed to parse {}", file.display()))?;
+        receipt.validate().context("receipt failed validation")?;
+        println!("doctor: receipt is structurally valid");
+    } else {
+        println!("doctor: no file provided; environment appears runnable");
+    }
+    Ok(())
+}
+
+fn bundle_command(args: BundleArgs, _cfg: CliConfig) -> Result<()> {
+    let receipt = if let Some(path) = &args.file {
+        let raw = fs::read_to_string(path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let env: ReceiptEnvelope = serde_json::from_str(&raw)?;
+        Some(env)
+    } else {
+        None
+    };
+
+    let support_cfg = SupportBundleConfig::default();
+    let context = capture_support_context("bundle");
+    let bundle = build_support_bundle(&support_cfg, context, receipt.as_ref());
+    let writer = SupportBundleWriter::new(&args.out_dir);
+    let file = writer.write_bundle(&bundle)?;
+    println!("wrote support bundle to {}", file.display());
+    println!("{}", lez_events::render_support_report(&bundle));
+    Ok(())
+}
+
+fn health_command(args: HealthArgs, _cfg: CliConfig) -> Result<()> {
+    if let Some(file) = args.file {
+        let raw = fs::read_to_string(&file)
+            .with_context(|| format!("failed to read {}", file.display()))?;
+        let receipt: ReceiptEnvelope = serde_json::from_str(&raw)?;
+        let ok = receipt.validate().is_ok();
+        let status = if ok {
+            HealthCheck::healthy("receipt", "receipt validated successfully")
+        } else {
+            HealthCheck::unhealthy(
+                "receipt",
+                "receipt failed validation",
+                "inspect the file and ensure event hex strings are valid",
+            )
+        };
+        println!("{}", serde_json::to_string_pretty(&status)?);
+    } else {
+        let status = HealthCheck::healthy("cli", "cli is responsive");
+        println!("{}", serde_json::to_string_pretty(&status)?);
+    }
+    Ok(())
+}
+
+fn explain_error_command(args: ExplainErrorArgs, _cfg: CliConfig) -> Result<()> {
+    let mut report = DiagnosticReport::new("Error explanation", "contextual explanation of a user-facing error");
+
+    if let Some(code) = args.code {
+        report.push(
+            DiagnosticRecord::new(DiagnosticLevel::Error, "error-code", "error code supplied")
+                .with_detail(code),
+        );
+    }
+
+    if let Some(message) = args.message {
+        report.push(
+            DiagnosticRecord::new(DiagnosticLevel::Warn, "error-message", "error message supplied")
+                .with_detail(message),
+        );
+    }
+
+    if report.is_empty() {
+        report.push(
+            DiagnosticRecord::new(DiagnosticLevel::Info, "explain-error", "no details supplied")
+                .with_detail("provide --code or --message for a richer report"),
+        );
+    }
+
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
+fn load_receipt_envelope(args: &DecodeArgs, cfg: &CliConfig) -> Result<ReceiptEnvelope> {
+    if let Some(path) = &args.file {
+        let raw = fs::read_to_string(path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let env: ReceiptEnvelope = serde_json::from_str(&raw)
+            .with_context(|| format!("failed to parse {}", path.display()))?;
+        env.validate().context("receipt failed validation")?;
+        return Ok(env);
+    }
+
+    if args.stdin {
+        let raw = prompts::read_stdin_all()?;
+        let env: ReceiptEnvelope = serde_json::from_str(&raw)?;
+        env.validate().context("receipt failed validation")?;
+        return Ok(env);
+    }
+
+    if let Some(tx) = &args.tx {
+        validate_tx_hash(tx)?;
+        let rpc = args.rpc.as_deref().unwrap_or(&cfg.rpc_url);
+        let client = Client::builder()
+            .timeout(Duration::from_millis(cfg.timeout_ms))
+            .build()
+            .map_err(|e| EventError::Rpc(e.to_string()))?;
+        let url = format!("{}/tx/{}/events", rpc.trim_end_matches('/'), tx);
+
+        let resp = retry(
+            RetryConfig {
+                attempts: cfg.retries.max(1),
+                backoff: lez_events::BackoffConfig::default(),
+            },
+            || {
+                client
+                    .get(&url)
+                    .send()
+                    .map_err(|e| EventError::Rpc(e.to_string()))
+            },
+        )?;
+
+        if !resp.status().is_success() {
+            return Err(EventError::Rpc(format!("rpc returned HTTP {}", resp.status())).into());
+        }
+
+        let env: ReceiptEnvelope = resp.json().map_err(|e| EventError::Rpc(e.to_string()))?;
+        env.validate().context("receipt failed validation")?;
+        return Ok(env);
+    }
+
+    Err(EventError::MissingField("file | stdin | tx").into())
+}
+
+// programs/event-demo/src/lib.rs
+#![cfg_attr(not(test), no_std)]
+
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use borsh::{BorshDeserialize, BorshSerialize};
+use lez_events::{emit_encrypted_event, emit_event, EventError, EventSchema, MAX_EVENT_SIZE};
+
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub enum Instruction {
+    Success { value: u64 },
+    FailAfterEvent { reason: String },
+    FailWithoutEvent,
+    SizeLimit,
+    FriendlyMessage { message: String },
+    Private { key: [u8; 32], nonce: [u8; 12], secret: u64 },
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, PartialEq, Clone)]
+pub struct SuccessEvent {
+    pub value: u64,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+pub struct FailureEvent {
+    pub reason: String,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, PartialEq, Clone)]
+pub struct FriendlyEvent {
+    pub message: String,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, PartialEq, Clone)]
+pub struct SecretEvent {
+    pub secret: u64,
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+pub struct OversizedEvent {
+    pub data: Vec<u8>,
+}
+
+impl EventSchema for SuccessEvent {
+    const NAME: &'static str = "event_demo::SuccessEvent";
+}
+impl EventSchema for FailureEvent {
+    const NAME: &'static str = "event_demo::FailureEvent";
+}
+impl EventSchema for FriendlyEvent {
+    const NAME: &'static str = "event_demo::FriendlyEvent";
+}
+impl EventSchema for SecretEvent {
+    const NAME: &'static str = "event_demo::SecretEvent";
+}
+impl EventSchema for OversizedEvent {
+    const NAME: &'static str = "event_demo::OversizedEvent";
+}
+
+#[derive(Debug)]
+pub enum ProgramError {
+    Event(EventError),
+    OversizeRequested { requested: usize, limit: usize },
+    PanicSimulated(&'static str),
+}
+
+impl core::fmt::Display for ProgramError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Event(e) => write!(f, "{e}"),
+            Self::OversizeRequested { requested, limit } => {
+                write!(f, "requested event size {requested} exceeds limit {limit}")
+            }
+            Self::PanicSimulated(msg) => write!(f, "simulated failure: {msg}"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ProgramError {}
+
+impl From<EventError> for ProgramError {
+    fn from(value: EventError) -> Self {
+        Self::Event(value)
+    }
+}
+
+pub fn process_instruction(instruction: Instruction) -> Result<(), ProgramError> {
+    match instruction {
+        Instruction::Success { value } => {
+            emit_event!(SuccessEvent { value })?;
+            Ok(())
+        }
+        Instruction::FailAfterEvent { reason } => {
+            emit_event!(FailureEvent { reason: reason.clone() })?;
+            Err(ProgramError::PanicSimulated("intentional failure after event"))
+        }
+        Instruction::FailWithoutEvent => {
+            Err(ProgramError::PanicSimulated("intentional failure before event emission"))
+        }
+        Instruction::SizeLimit => {
+            let payload = vec![0u8; MAX_EVENT_SIZE + 1];
+            let oversized = OversizedEvent { data: payload };
+            match emit_event!(oversized) {
+                Ok(()) => Ok(()),
+                Err(EventError::EventTooLarge { size, limit }) => {
+                    Err(ProgramError::OversizeRequested { requested: size, limit })
+                }
+                Err(err) => Err(ProgramError::Event(err)),
+            }
+        }
+        Instruction::FriendlyMessage { message } => {
+            emit_event!(FriendlyEvent { message })?;
+            Ok(())
+        }
+        Instruction::Private { key, nonce, secret } => {
+            emit_encrypted_event!(SecretEvent { secret }, &key, &nonce)
+                .map_err(ProgramError::Event)
+        }
+    }
+}
+
+// tests/diagnostics.rs
+use lez_events::{
+    build_support_bundle, capture_support_context, DiagnosticLevel, DiagnosticRecord,
+    DiagnosticReport, HealthCheck, ReceiptEnvelope, ReceiptStatus, SupportBundleConfig,
+};
+
+#[test]
+fn diagnostic_report_accumulates_records() {
+    let mut report = DiagnosticReport::new("test", "summary");
+    report.push(DiagnosticRecord::new(
+        DiagnosticLevel::Info,
+        "component",
+        "message",
+    ));
+    assert_eq!(report.records.len(), 1);
+}
+
+#[test]
+fn support_bundle_includes_health_and_diagnostics() {
+    let receipt = ReceiptEnvelope {
+        tx_hash: "0xabc".into(),
+        status: ReceiptStatus::Failed,
+        error: Some("boom".into()),
+        state_root: None,
+        events: vec!["00deadbeef".into()],
+    };
+
+    let bundle = build_support_bundle(
+        &SupportBundleConfig::default(),
+        capture_support_context("test"),
+        Some(&receipt),
+    );
+
+    assert!(bundle.diagnostics.is_some());
+    assert!(!bundle.health.is_empty());
+}
+
+# docs/supportability.md
+
+## What this adds
+
+This supportability layer is meant to reduce the time between a user report and a reproducible fix.
+
+### New capabilities
+
+- structured diagnostic records
+- support bundles containing config, env, and receipts
+- health checks for receipt structure and local environment
+- an `explain-error` command for user-facing failures
+- atomic output writes for safer support artifacts
+- clearer CLI context and validation
+
+### Helpful commands
+
+```bash
+lez-events doctor --file receipt.json
+lez-events health --file receipt.json
+lez-events bundle --file receipt.json --out-dir support-bundles
+lez-events explain-error --code TxBudgetExceeded --message "event budget exceeded"
+
+Expected support workflow
+capture the receipt or failing input
+run doctor to validate structure
+run health to see pass/fail checks
+generate a bundle for sharing
+inspect the bundle JSON for environment and diagnostics
+
+This set is aimed at making the code easier to maintain and debug in real use: the CLI now produces better reports, the library can assemble support bundles automatically, and invalid data is rejected with more context.
+
+
+
