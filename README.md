@@ -41,6 +41,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Closed |
 | [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation                | Large  | Open   |
 | [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Open   |
+| [LP-0020](prizes/LP-0020.md) | OSM Map Viewer — offline rendering, search, and POI discovery | Large  | Draft  |
 
 ### Proposing a New Prize
 
