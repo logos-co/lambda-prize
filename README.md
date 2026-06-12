@@ -31,6 +31,8 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | File | Description | Size | Status |
 |------|-------------|------|--------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
+| [LP-0018](prizes/LP-0018.md) | Spam Protection for Atomic-Swap Makers                    | Large  | Draft  |
+| [LP-0019](prizes/LP-0019.md) | Taker Reliability for Atomic Swaps                        | Large  | Draft  |
 
 ### Legacy prizes (original scheme)
 
