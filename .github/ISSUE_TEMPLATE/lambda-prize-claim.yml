@@ -18,6 +18,23 @@ body:
         > [!IMPORTANT]
         > The prize amount will be paid in **USDT on Ethereum** to the **Ethereum wallet address** you enter below.
 
+  - type: dropdown
+    id: release
+    attributes:
+      label: Which release is this?
+      description: >
+        Prizes are split 50% delivery / 50% adoption. Most claims are the full
+        prize, released once adoption is verified. Choose "Delivery only" if you
+        were told the delivery half is being released early because the consumer was
+        unresponsive, and "Adoption" if you are now claiming the remaining adoption
+        half.
+      options:
+        - Full prize (delivery + adoption)
+        - Delivery only (consumer-unresponsive release)
+        - Adoption (remaining half after an earlier delivery-only release)
+    validations:
+      required: true
+
   - type: input
     id: typeform_response_id
     attributes:
