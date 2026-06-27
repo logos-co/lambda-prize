@@ -30,17 +30,16 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Medium | Open                         |
 | [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances               | Large  | Draft                        |
 | [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                        | Large  | Open                         |
-| [LP-0006](prizes/LP-0006.md) | Atomic Swap with LEZ (BTC, XMR, ETH)                     | XL     | Draft                        |
 | [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large  | Open                         |
-| [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        | Small  | Closed                       |
-| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Closed                       |
+| [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        | Small  | Closed ([Solution](solutions/LP-0009.md)) |
+| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Closed ([Solution](solutions/LP-0010.md)) |
 | [LP-0011](prizes/LP-0011.md) | Program development tooling: Rust SDK                    | Medium | Draft                        |
-| [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      | Large  | Closed                       |
-| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Open   |
-| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Closed |
-| [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Closed |
-| [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation                | Large  | Open   |
-| [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Open   |
+| [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      | Large  | Closed ([Solution](solutions/LP-0012.md)) |
+| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Open                         |
+| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Closed                       |
+| [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Closed                       |
+| [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation                | Large  | Open                         |
+| [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Open                         |
 
 ### Proposing a New Prize
 
