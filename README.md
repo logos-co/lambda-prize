@@ -52,6 +52,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Closed                       |
 | [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation                | Large  | Closed ([Solution](solutions/LP-0016.md)) |
 | [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Closed ([Solution](solutions/LP-0017.md)) |
+| [LP-0023](prizes/LP-0023.md) | Program Registry: verified builds for LEZ programs       | Large  | Draft                        |
 
 > [!IMPORTANT]
 > **Legacy scheme wind-down.** To make room for adoption-first prizes, **LP-0002**, **LP-0003**, and **LP-0008** close on **11 September 2026 at 23:59 CEST**. No new submissions will be accepted after that time. If you have already submitted a solution, yours will be reviewed first. In-flight submissions received before the deadline will still be evaluated. Prizes already marked *Closed* are unaffected. 
