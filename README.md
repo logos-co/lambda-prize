@@ -31,7 +31,7 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 |------|-------------|------|--------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
 | [LP-0018](prizes/LP-0018.md) | OpenStreetMap integration: decentralized map data distribution | Medium | Open |
-| [LP-0023](prizes/LP-0023.md) | Program Registry: verified builds for LEZ programs | Large | Draft |
+| [LP-0023](prizes/LP-0023.md) | LEZ Program Registry | Small | Open |
 
 ### Earlier prizes
 
