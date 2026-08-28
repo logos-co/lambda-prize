@@ -2,8 +2,8 @@ name: Validate Submission
 
 # `pull_request_target` is used so the workflow can comment on PRs from forks
 # (which is how solutions are submitted). It runs on the base branch with
-# write perms; the PR-head checkout is treated as untrusted data only and
-# never executed.
+# write perms, so the fork's tree is never checked out here: the only
+# submission content the validator reads is fetched by path as data.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited]
@@ -26,13 +26,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
-
-      - name: Checkout PR head (untrusted data, never executed)
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          path: pr
+          # Nothing in this job pushes, so the token has no reason to sit in
+          # base/.git/config for the life of the run.
           persist-credentials: false
 
       - name: Get changed files
@@ -51,6 +46,31 @@ jobs:
             echo "$files"
             echo "__LP_EOF__"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Fetch changed solution files (untrusted data, never executed)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          # The validator reads exactly one thing from the PR: the submission
+          # markdown. Fetching those blobs by path keeps the fork's working
+          # tree off the runner entirely, so there is nothing here to execute
+          # and no `allow-unsafe-pr-checkout` opt-in to carry. Paths come from
+          # the PR files API and are constrained to a single markdown file
+          # directly under `solutions/`.
+          mkdir -p pr/solutions
+          solution_files=$(printf '%s\n' "$CHANGED_FILES" \
+            | grep -E '^solutions/[A-Za-z0-9._-]+\.md$' || true)
+          # Unquoted on purpose: the pattern above admits no spaces or globs.
+          for f in $solution_files; do
+            if ! gh api -H "Accept: application/vnd.github.raw" \
+                 "/repos/${REPO}/contents/${f}?ref=${HEAD_SHA}" > "pr/${f}"; then
+              rm -f "pr/${f}"
+              echo "::warning::Could not fetch ${f} at ${HEAD_SHA}."
+            fi
+          done
 
       - name: Run validation
         id: validate

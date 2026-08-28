@@ -4,8 +4,11 @@
 #
 # Runtime contract (from validate-submission.yml):
 #   - Runs on ubuntu-latest (GNU grep / sed / coreutils assumed).
-#   - `base/` contains the trusted base-branch checkout.
-#   - `pr/`   contains the PR-head checkout, treated as untrusted data only.
+#   - `base/` contains the trusted base-branch checkout, and is the only
+#     source for repo-owned files such as the prize specs.
+#   - `pr/solutions/` contains just the submission markdown the PR changed,
+#     fetched by path from the API and treated as untrusted data only. The
+#     fork's working tree is never checked out.
 #   - Env: PR_TITLE, PR_REPO, BASE_REPO, CHANGED_FILES.
 set -euo pipefail
 
@@ -230,7 +233,9 @@ if $IS_SOLUTION; then
   # -------------------------------------------------------------------------
   # 3h. Prize exists and is open
   # -------------------------------------------------------------------------
-  PRIZE_FILE="pr/prizes/${PRIZE_ID}.md"
+  # Read from base/: the prize spec is repo-owned, so the authoritative copy
+  # is the base branch's, not whatever stale revision the fork branched from.
+  PRIZE_FILE="base/prizes/${PRIZE_ID}.md"
   if [[ ! -f "$PRIZE_FILE" ]]; then
     err "Prize \`${PRIZE_ID}\` not found in \`prizes/\`. Check the ID."
   else
@@ -261,7 +266,12 @@ if $IS_SOLUTION; then
 
     CLONE_DIR="/tmp/submission-repo"
     rm -rf "$CLONE_DIR"
-    if git clone --depth=1 "$REPO_URL" "$CLONE_DIR" 2>/dev/null; then
+    # `REPO_URL` is submitter-controlled, so the clone is bounded: no auth
+    # prompts, no submodules, one shallow branch, and a wall-clock ceiling so
+    # an oversized or slow repo cannot consume the whole job.
+    if GIT_TERMINAL_PROMPT=0 timeout "${LP_CLONE_TIMEOUT:-300}" \
+         git clone --depth=1 --single-branch --no-tags \
+                   --no-recurse-submodules "$REPO_URL" "$CLONE_DIR" 2>/dev/null; then
 
       # 4a. AI workspace artifacts in the external repo
       AI_ARTIFACTS=()
@@ -336,7 +346,9 @@ if $IS_SOLUTION; then
 
         # Logos Messaging / Waku integration
         if echo "$PRIZE_CONTENT" | grep -qi 'Logos Messaging\|Logos Chat\|Waku'; then
-          waku_ref=$(grep -ril 'waku\|logos.messaging\|logos.chat' "$CLONE_DIR" \
+          # Time-bounded: this is the one full-content scan of the clone.
+          waku_ref=$(timeout "${LP_SCAN_TIMEOUT:-60}" \
+            grep -ril 'waku\|logos.messaging\|logos.chat' "$CLONE_DIR" \
             --include='*.rs' --include='*.go' --include='*.ts' --include='*.js' \
             --include='*.toml' --include='*.json' 2>/dev/null | head -1 || true)
           if [[ -z "$waku_ref" ]]; then

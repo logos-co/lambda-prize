@@ -1,18 +1,18 @@
 # Logos Lambda Prize Program – Terms & Conditions
 
-*Last updated: 2 March 2026*
+*Last updated: 17 July 2026*
 
-These Terms and Conditions ("Terms") are entered into by and between Logos Collective Association, Baarerstrasse 10, 6300 Zug, Switzerland ("Logos", "we", "us") and any individual or legal entity participating in the λPrize Program, including by submitting any solution or pull request ("Submission") to the λPrize GitHub repository ("you", "Participant") (each a "Party" and together the "Parties").
+These Terms and Conditions ("Terms") are entered into by and between Logos Collective Association, Baarerstrasse 10, 6300 Zug, Switzerland ("Logos", "we", "us") and any individual or legal entity participating in the λ Prize Program, including by submitting any solution or pull request ("Submission") to the λ Prize GitHub repository ("you", "Participant") (each a "Party" and together the "Parties").
 
-By making a Submission to λPrize through the relevant λPrize GitHub repositories or relevant platform (and for the purposes of these Terms, it'll be referred to as λPrize Github repository), you acknowledge that you have read, understood, and agree to be bound by these Terms and any applicable Prize specifications.
+By making a Submission to λ Prize through the relevant λ Prize GitHub repositories or relevant platform (and for the purposes of these Terms, it'll be referred to as λ Prize Github repository), you acknowledge that you have read, understood, and agree to be bound by these Terms and any applicable Prize specifications.
 
 You can contact us about these Terms in case you have any questions: [legal@free.technology](mailto:legal@free.technology).
 
 ## 1. Lambda Prize Overview
 
-Logos supports the development and adoption of decentralised technologies and applications around the Logos technology stack and related ecosystem components through the λPrize Program ("Program" or "λPrize").
+Logos supports the development and adoption of decentralised technologies and applications around the Logos technology stack and related ecosystem components through the λ Prize Program ("Program" or "λ Prize").
 
-The Program comprises multiple prizes (each a "Prize"), including but not limited to prizes described in the λPrize GitHub repository. Each Prize is governed by a separate prize specification, which sets out the scope, requirements, success criteria, and prize amount applicable to that Prize.
+The Program comprises multiple prizes (each a "Prize"), including but not limited to prizes described in the λ Prize GitHub repository. Each Prize is governed by a separate prize specification, which sets out the scope, requirements, success criteria, and prize amount applicable to that Prize.
 
 The Program is discretionary in nature. Logos retains sole and absolute discretion over the design of the Program, the content and nature of any prize specifications, the evaluation of submissions, the selection (or non‑selection) of winners, and the award or non‑award of any Prize. No Participant will have any entitlement to receive a Prize.
 
@@ -60,7 +60,7 @@ Each Submission shall target only one Prize as defined in the relevant Prize spe
 
 ### 5.2 Manner of submissions and deadline
 
-Submissions must be made through λPrize GitHub repository workflow, as indicated in the applicable Prize specification or an alternative platform as communicated by Logos.
+Submissions must be made through λ Prize GitHub repository workflow, as indicated in the applicable Prize specification or an alternative platform as communicated by Logos.
 
 Unless stated otherwise, Submissions for the Parallel Society event must be received before the deadline specified in the relevant platform (e.g. Saturday 7 March 2026, 23:59 UTC). Late Submissions will not be considered.
 
@@ -70,8 +70,9 @@ A valid Submission must satisfy all of Logos' requirements set out in the releva
 
 1. source code hosted in a public repository;
 2. a working demo or deployable artefact;
-3. adequate technical documentation and any other specified documentation indicated; and
-4. any other requirements indicated by Logos.
+3. a recorded demo or walkthrough video of the Submission;
+4. adequate technical documentation and any other specified documentation indicated; and
+5. any other requirements indicated by Logos.
 
 Logos reserves the right to not review any incomplete or partial Submissions or Submissions which do not meet all mandatory requirements in the applicable Prize specification.
 
@@ -91,7 +92,7 @@ Subject to the licences granted below, Participants retain ownership of the inte
 
 ### 6.2 Licence to Logos
 
-By making a Submission, Participants grant Logos and its Affiliates a worldwide, perpetual, irrevocable, non‑exclusive, royalty‑free licence (with the right to sublicense) to use, reproduce, display, perform, distribute, adapt, modify, and create derivative works from Participant's Submission and related materials for purposes connected with the Program, the Logos technology stack, and the broader Logos ecosystem, including without limitation for testing, evaluation, promotion, documentation, and demonstration.
+By making a Submission, Participants grant Logos and its Affiliates a worldwide, perpetual, irrevocable, non‑exclusive, royalty‑free licence (with the right to sublicense) to use, reproduce, display, perform, distribute, adapt, modify, and create derivative works from Participant's Submission and related materials (including any video and audiovisual materials) for purposes connected with the Program, the Logos technology stack, and the broader Logos ecosystem, including without limitation for testing, evaluation, promotion, documentation, demonstration and as the case may be, publishing on any of Logos' or Affiliates' websites, social media profiles or other public channels.
 
 ## 7. Evaluation and judging
 
@@ -127,7 +128,7 @@ Winners are solely responsible for any tax obligations, reporting, or filings ar
 
 ## 9. Post-Event continuation
 
-Following the conclusion of any associated hackathon or live event (including the Parallel Society Congress), the λPrize GitHub repository may remain open or be opened for further Submissions from a specified date.
+Following the conclusion of any associated hackathon or live event (including the Parallel Society Congress), the λ Prize GitHub repository may remain open or be opened for further Submissions from a specified date.
 
 Unless otherwise specified:
 
@@ -164,7 +165,7 @@ Logos reserves the right, at any time and in its sole discretion, to:
 4. cancel individual Prizes; or
 5. cancel, suspend, or modify the Program or any associated event in whole or in part.
 
-Logos will communicate material changes to the Program through the λPrize GitHub repository, or other official channels designated by Logos. Your continued participation in the Program after publication of updated Terms or rules constitutes your acceptance of such updates.
+Logos will communicate material changes to the Program through the λ Prize GitHub repository, or other official channels designated by Logos. Your continued participation in the Program after publication of updated Terms or rules constitutes your acceptance of such updates.
 
 All decisions by Logos regarding eligibility, evaluation, and winner selection are final and binding.
 
