@@ -78,7 +78,7 @@ Solutions live in the `[solutions/](solutions/)` directory. To submit a solution
 2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials. The implementation must be dual licensed under the MIT License **and** Apache License 2.0.
 3. Open a pull request titled `Solution: LP-XXXX — <Short Description>`.
 
-For **adoption-first** prizes, the solution PR should include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
+To meet **adoption-first** criteria, the solution PR should include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
 
 If multiple solutions target the same prize, the first submission that satisfies all success criteria wins unless specified otherwise. For **adoption-first** prizes that includes the Adoption criteria. A solution PR is timestamped by its opening date.
 
