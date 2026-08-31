@@ -21,16 +21,28 @@ Together these form a unified, modular ecosystem, accessible through **Logos Cor
 
 All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
 
+λPrize is moving from its original **build-and-review** model to an **adoption-first** model. Which scheme a prize follows is shown in the tables below.
+
+- **Adoption-first prizes** are graded on a functionality gate **plus** adoption criteria (real third-party usage, on-chain coverage or activity, and human/social validation where the prize lists it). Manual code review is not the primary gate. See each prize's **Adoption** section for the dimensions we look at.
+- **Legacy prizes** follow the original first-come-first-served, manual-review model. The remaining live legacy prizes are being wound down (see below).
+
+### Adoption-first prizes (current scheme)
+
+| File | Description | Size | Status |
+|------|-------------|------|--------|
+| [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
+
+### Legacy prizes (original scheme)
 
 | File                         | Description                                              | Size   | Status                       |
 |------------------------------|----------------------------------------------------------|--------|------------------------------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | —      | —                            |
 | [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof                              | Medium | Draft                        |
-| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  | Large  | Open                         |
-| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Medium | Open                         |
+| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  | Large  | Open (closes 11 Sep 2026, 23:59 CEST) |
+| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Medium | Open (closes 11 Sep 2026, 23:59 CEST) |
 | [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances               | Large  | Draft                        |
-| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                        | Large  | Closed ([Solution](solutions/LP-0005.md) |
-| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large  | Open                         |
+| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                        | Large  | Closed ([Solution](solutions/LP-0005.md)) |
+| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large  | Open (closes 11 Sep 2026, 23:59 CEST) |
 | [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        | Small  | Closed ([Solution](solutions/LP-0009.md)) |
 | [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Closed ([Solution](solutions/LP-0010.md)) |
 | [LP-0011](prizes/LP-0011.md) | Program development tooling: Rust SDK                    | Medium | Draft                        |
@@ -41,6 +53,9 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation                | Large  | Closed ([Solution](solutions/LP-0016.md)) |
 | [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Closed ([Solution](solutions/LP-0017.md)) |
 
+> [!IMPORTANT]
+> **Legacy scheme wind-down.** To make room for adoption-first prizes, **LP-0002**, **LP-0003**, and **LP-0008** close on **11 September 2026 at 23:59 CEST**. No new submissions will be accepted after that time. If you have already submitted a solution, yours will be reviewed first. In-flight submissions received before the deadline will still be evaluated. Prizes already marked *Closed* are unaffected. 
+
 ### Proposing a New Prize
 
 Prizes can currently only be proposed by Logos CCs. A separate process for sourcing ideas from the wider community is planned.
@@ -49,7 +64,7 @@ Prizes can currently only be proposed by Logos CCs. A separate process for sourc
 2. Fill in all sections except **Prize Structure** (prize pool, revision date) — these are determined by the Logos team.
 3. Open a pull request titled `LP-XXXX: <Prize Title>`.
 
-Evaluation is first-come-first-served by default: the first submission that meets all success criteria wins. Single winner unless otherwise specified in the prize.
+Evaluation is first-come-first-served: the first submission that meets all success criteria wins. For **adoption-first** prizes that includes the **Adoption** criteria; the first to meet them and submit the solution (with supporting evidence) wins. Single winner unless otherwise specified in the prize.
 
 ### Submitting a Solution
 
@@ -59,24 +74,19 @@ Solutions live in the `[solutions/](solutions/)` directory. To submit a solution
 2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials.
 3. Open a pull request titled `Solution: LP-XXXX — <Short Description>`.
 
-If multiple solutions target the same prize, the first submission that satisfies all success criteria wins unless specified otherwise. A solution PR is timestamped by its opening date.
+For **adoption-first** prizes, the solution PR should include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
 
-> [!IMPORTANT]
-> **Parallel Society Launch Event**
->
-> **λ**Prize launched at **Parallel Society**, a Logos-run event in Lisbon on **6–7 March 2026**, via a dedicated hackathon platform. Submissions for LP-0013 and LP-0014 were received during the event.
->
-> Submissions through this repository are now open and follow the standard first-come-first-served process. However, Parallel Society submissions that are still being evaluated take precedence.
+If multiple solutions target the same prize, the first submission that satisfies all success criteria wins unless specified otherwise. For **adoption-first** prizes that includes the Adoption criteria. A solution PR is timestamped by its opening date.
 
 ### Evaluation Policies
 
-The following policies apply to **all** prizes unless a specific prize states otherwise.
+The following policies apply to **all** prizes unless a specific prize states otherwise. **Adoption-first** prizes are also evaluated against their **Adoption** section. Authors are expected to include evidence and supporting data for those criteria in the solution PR.
 
 **Submissions.** Each builder (or team) is allowed a maximum of **3 submissions** per prize, with at most **one submission/review per week**.
 
-**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders.
+**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria, and on the **Adoption** section for adoption-first prizes. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders.
 
-**Demo requirements.** Every submission that requires a demo must include a narrated video walkthrough in which the builder explains what they built and why, walks through the architecture and key implementation decisions, and demonstrates the full end-to-end flow. A silent screencast without explanation is not sufficient. Prize-specific demo content is listed in each prize's **Submission Requirements**.
+**Demo requirements.** For **legacy** prizes, every submission that requires a demo must include a narrated video walkthrough in which the builder explains what they built and why, walks through the architecture and key implementation decisions, and demonstrates the full end-to-end flow. A silent screencast without explanation is not sufficient. Prize-specific demo content is listed in each prize's **Submission Requirements**. For **adoption-first** prizes, a narrated demo is optional unless the prize's Submission Requirements say otherwise.
 
 ## Claiming payment
 
