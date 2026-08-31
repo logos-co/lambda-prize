@@ -64,7 +64,11 @@ Prizes can currently only be proposed by Logos CCs. A separate process for sourc
 2. Fill in all sections except **Prize Structure** (prize pool, revision date) — these are determined by the Logos team.
 3. Open a pull request titled `LP-XXXX: <Prize Title>`.
 
-Evaluation is first-come-first-served: the first submission that meets all success criteria wins. For **adoption-first** prizes that includes the **Adoption** criteria; the first to meet them and submit the solution (with supporting evidence) wins. Single winner unless otherwise specified in the prize.
+Evaluation criteria are:
+- first-come-first-served: the first submission that meets all success criteria wins.
+- **adoption-first** as listed in **Adoption** section of a prize.
+
+The first to meet them and submit the solution (with supporting evidence) wins. Single winner unless otherwise specified in the prize.
 
 ### Submitting a Solution
 
