@@ -71,7 +71,7 @@ Evaluation is first-come-first-served: the first submission that meets all succe
 Solutions live in the `[solutions/](solutions/)` directory. To submit a solution:
 
 1. Create a markdown file in `solutions/` matching the prize identifier — e.g., `solutions/LP-0001.md` for prize `LP-0001`.
-2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials.
+2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials. The implementation must be dual licensed under the MIT License **and** Apache License 2.0.
 3. Open a pull request titled `Solution: LP-XXXX — <Short Description>`.
 
 For **adoption-first** prizes, the solution PR should include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
@@ -106,7 +106,7 @@ If **privacy** is a concern, we recommend using a **single-use Ethereum address*
 
 All participants are bound by the [Terms & Conditions](TERMS.md). Key points:
 
-- Submissions must be licensed under MIT or Apache 2.0.
+- Submissions must be dual licensed under the MIT License and Apache License 2.0.
 - One submission per prize per participant/team.
 - Logos retains sole discretion over evaluation and prize awards.
 - Submissions are public and non-confidential.
