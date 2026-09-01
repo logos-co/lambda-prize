@@ -23,7 +23,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 
 λPrize is moving from its original **build-and-review** model to an **adoption-first** model. Which scheme a prize follows is shown in the tables below.
 
-- **Adoption-first prizes** are graded on a functionality gate **plus** adoption criteria (real third-party usage, on-chain coverage or activity, and human/social validation where the prize lists it). Manual code review is not the primary gate. See each prize's **Adoption** section for the dimensions we look at.
+- **Adoption-first prizes** are graded on a functionality gate **plus** adoption criteria (real third-party usage, on-chain coverage or activity, and human/social validation where the prize lists it). Manual code review is not the primary gate. See each prize's **Adoption** section for the dimensions we look at. See FAQ below for more details.
 - **Legacy prizes** follow the original first-come-first-served, manual-review model. The remaining live legacy prizes are being wound down (see below).
 
 ### Adoption-first prizes (current scheme)
@@ -91,6 +91,26 @@ The following policies apply to **all** prizes unless a specific prize states ot
 **Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria, and on the **Adoption** section for adoption-first prizes. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders.
 
 **Demo requirements.** For **legacy** prizes, every submission that requires a demo must include a narrated video walkthrough in which the builder explains what they built and why, walks through the architecture and key implementation decisions, and demonstrates the full end-to-end flow. A silent screencast without explanation is not sufficient. Prize-specific demo content is listed in each prize's **Submission Requirements**. For **adoption-first** prizes, a narrated demo is optional unless the prize's Submission Requirements say otherwise.
+
+## FAQ
+
+This FAQ covers the current Lambda Prize (LP) scheme that includes adoption-based criteria.
+
+### How is this meant to work?
+
+Build something useful on the Logos stack, share it, and let other builders pick it up if it helps them. When that usage is real — independent modules, on-chain activity, or whatever the prize lists — open a **solution PR** with evidence. Remember that meeting a number without a solution PR in this repository does not establish priority.
+
+### Where do I share my work before I hit the adoption?
+
+This repository is the place you claim a prize, not a showcase while you are still building or trying to get users/integrations. **Discord is currently the main community hub.** Share what you are building towards a λPrize there, look for collaborators and people who might use it, and follow other builders in **#builder-hub**. Additional discovery platforms may be introduced in the future, but for now, make sure to participate actively on Discord. Being engaged in the community and becoming a trusted resource for others is also an important part of what this program indirectly funds.
+
+### Should I chase the adoption criteria as soon as the code works?
+
+The criteria describe what a useful piece of infrastructure looks like once the ecosystem has had time to grow around it. If the work is good, other teams will use it as the stack and the community mature. Be prepared to support others in using your project and to incorporate their feedback. Whether that takes a couple of weeks or longer is fine. 
+
+### Can I build in public? What if someone copies my work?
+
+Building in public is expected. We expect original, fair participation: taking someone else's in-progress challenge, rebranding it, and claiming the prize on the back of their work is not how this is meant to work. Logos has sole discretion over evaluation and awards.
 
 ## Claiming payment
 
