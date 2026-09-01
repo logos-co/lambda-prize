@@ -65,10 +65,10 @@ Prizes can currently only be proposed by Logos CCs. A separate process for sourc
 3. Open a pull request titled `LP-XXXX: <Prize Title>`.
 
 Evaluation criteria are:
-- first-come-first-served: the first submission that meets all success criteria wins.
+- first-come-first-served: the first **solution PR** that meets all success criteria wins.
 - **adoption-first** as listed in **Adoption** section of a prize.
 
-The first to meet them and submit the solution (with supporting evidence) wins. Single winner unless otherwise specified in the prize.
+The first to meet them and open a solution PR (with supporting evidence) wins. Meeting the criteria without a solution PR in this repository does not establish priority. Single winner unless otherwise specified in the prize.
 
 ### Submitting a Solution
 
@@ -78,15 +78,15 @@ Solutions live in the `[solutions/](solutions/)` directory. To submit a solution
 2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials. The implementation must be dual licensed under the MIT License **and** Apache License 2.0.
 3. Open a pull request titled `Solution: LP-XXXX — <Short Description>`.
 
-To meet **adoption-first** criteria, the solution PR should include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
+To meet **adoption-first** criteria, the solution PR must include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
 
-If multiple solutions target the same prize, the first submission that satisfies all success criteria wins unless specified otherwise. For **adoption-first** prizes that includes the Adoption criteria. A solution PR is timestamped by its opening date.
+A solution PR in this repository is required to claim any prize, including **adoption-first** prizes. If multiple solutions target the same prize, the first solution PR that satisfies all success criteria wins unless specified otherwise. For **adoption-first** prizes that includes the Adoption criteria. Meeting the criteria without a solution PR does not establish priority. A solution PR is timestamped by its opening date.
 
 ### Evaluation Policies
 
 The following policies apply to **all** prizes unless a specific prize states otherwise. **Adoption-first** prizes are also evaluated against their **Adoption** section. Authors are expected to include evidence and supporting data for those criteria in the solution PR.
 
-**Submissions.** Each builder (or team) is allowed a maximum of **3 submissions** per prize, with at most **one submission/review per week**.
+**Submissions.** A solution PR in this repository is required to claim any prize. Each builder (or team) is allowed a maximum of **3 submissions** per prize, with at most **one submission/review per week**.
 
 **Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria, and on the **Adoption** section for adoption-first prizes. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders.
 
