@@ -102,7 +102,7 @@ Build something useful on the Logos stack, share it, and let other builders pick
 
 ### Where do I share my work before I hit the adoption?
 
-This repository is the place you claim a prize, not a showcase while you are still building or trying to get users/integrations. **Discord is currently the main community hub.** Share what you are building towards a λPrize there, look for collaborators and people who might use it, and follow other builders in **#builder-hub**. Additional discovery platforms may be introduced in the future, but for now, make sure to participate actively on Discord. Being engaged in the community and becoming a trusted resource for others is also an important part of what this program indirectly funds.
+This repository is the place you claim a prize, not a showcase while you are still building or trying to get users/integrations. **Discord is currently the main community hub.** Share what you are building towards a λPrize there, look for collaborators and people who might use it, and follow other builders in **#builder-hub**. The [Logos Forum](https://forum.logos.co/) is another community space for longer-form discussion. Additional discovery platforms may be introduced in the future, but for now, make sure to participate actively on Discord. Being engaged in the community and becoming a trusted resource for others is also an important part of what this program indirectly funds.
 
 ### Should I chase the adoption criteria as soon as the code works?
 
