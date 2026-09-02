@@ -44,10 +44,10 @@ In these terms, the following capitalised terms have the meaning set out below:
 
 These Terms govern:
 
-1. A Participant’s participation in the Program;
-2. The making and evaluation of Submissions in the Program;
-3. The selection of a winning Submission and award of the relevant Prize amount by Logos, and
-4. All related interactions between the Participant and Logos in connection with the Program.
+(a) A Participant’s participation in the Program;
+(b) The making and evaluation of Submissions in the Program;
+(c) The selection of a winning Submission and award of the relevant Prize amount by Logos, and
+(d) All related interactions between the Participant and Logos in connection with the Program.
 
 These Terms do not create any contract for services, employment relationship, partnership, or joint venture, and do not create any obligation on Logos to award a Prize amount or provide any funding, support, or ongoing engagement beyond any specific Prize amount actually paid.
 
@@ -55,12 +55,12 @@ These Terms do not create any contract for services, employment relationship, pa
 
 By participating in the Program or making a Submission, the Participant represents to Logos that:
 
-1. The Participant has full legal capacity and authority to enter into these Terms and to make the Submission, and, where applicable, the individual acting is duly authorised to bind any entity on whose behalf the Submission is made.
-2. These Terms constitute a legal, valid, and binding obligation, enforceable against the Participant in accordance with their terms.
-3. All information provided by the Participant in connection with the Program (including registration details and any information in or relating to a Submission) is true, accurate, complete, and not misleading in any material respect at the time provided, and the Participant will promptly notify Logos if it becomes inaccurate or incomplete.
-4. The Participant shall comply with all laws applicable to itself and its activities in connection with the Program,
-5. Neither the Participant, or if the Participant is an entity, its directors, officers, or beneficial owners is a Sanctioned Person or in violation of any Sanctions, and the Participant shall not engage in any activity in connection with the Program that would cause Logos to violate any Sanctions.
-6. The Submission is the Participant’s work (or that of the Participant’s team) and the Participant hs the right to submit it, and it does not infringe the intellectual property rights or other rights of any third party.
+(a) The Participant has full legal capacity and authority to enter into these Terms and to make the Submission, and, where applicable, the individual acting is duly authorised to bind any entity on whose behalf the Submission is made.
+(b) These Terms constitute a legal, valid, and binding obligation, enforceable against the Participant in accordance with their terms.
+(c) All information provided by the Participant in connection with the Program (including registration details and any information in or relating to a Submission) is true, accurate, complete, and not misleading in any material respect at the time provided, and the Participant will promptly notify Logos if it becomes inaccurate or incomplete.
+(d) The Participant shall comply with all laws applicable to itself and its activities in connection with the Program,
+(e) Neither the Participant, or if the Participant is an entity, its directors, officers, or beneficial owners is a Sanctioned Person or in violation of any Sanctions, and the Participant shall not engage in any activity in connection with the Program that would cause Logos to violate any Sanctions.
+(f) The Submission is the Participant’s work (or that of the Participant’s team) and the Participant hs the right to submit it, and it does not infringe the intellectual property rights or other rights of any third party.
 
 ## 5. Submissions
 
@@ -76,10 +76,10 @@ Submissions must be made through λPrize GitHub repository workflow, as indicate
 
 A valid Submission must satisfy all of Logos’ mandatory requirements as set out in the relevant Specification, which includes but is not limited to:
 
-1. Source code hosted in a public repository and available for Logos to review the Submission;
-2. A working demo or deployable Artefact;
-3. Adequate technical documentation and any other specified documentation indicated; and
-4. Any other requirements indicated by Logos as mandatory for that Prize.
+(a) Source code hosted in a public repository and available for Logos to review the Submission;
+(b) A working demo or deployable Artefact;
+(c) Adequate technical documentation and any other specified documentation indicated; and
+(d) Any other requirements indicated by Logos as mandatory for that Prize.
 
 The Specifications may include additional criteria or requirements that the Participant must satisfy. Logos reserves the right not to review any incomplete or partial Submissions or any Submissions that do not meet the mandatory requirements or criteria of the applicable Specification.
 
@@ -93,13 +93,13 @@ While not mandatory, Participants are encouraged to continue making their Artefa
 
 Participants acknowledge that all Submissions are made on a voluntary, public, and non‑confidential basis. The content of a Submission may be publicly visible in the relevant repository and may be viewed, commented upon and discussed in accordance with the functionality available in the respective GIthub repository. Participants are solely responsible for ensuring that no confidential or sensitive information is included in their Submission.
 
-### 5.6 Intellectual Property
+## 6. Intellectual Property
 
-#### 5.6.1 Retained ownership
+### 6.1 Retained ownership
 
 Subject to the licences granted below and the open-source licences applicable to the Submissions, Participants retain ownership of the intellectual property rights in their respective submissions.
 
-#### 5.6.2 Licence to Logos
+### 6.2 Licence to Logos
 
 By making a Submission, Participants grant Logos and its Affiliates a worldwide, perpetual, irrevocable, non‑exclusive, royalty‑free licence (with the right to sublicense) to use, reproduce, display, perform, distribute, adapt, modify, and create derivative works from Participant’s Submission and related materials for purposes connected with the Program, the Logos technology stack, and the broader Logos ecosystem, including without limitation for testing, evaluation, promotion, documentation, and demonstration.
 
@@ -143,74 +143,107 @@ Successful Participants are solely responsible for any tax obligations, reportin
 
 ## 9. Code of Conduct
 
-1. Participants are expected to behave in a respectful, professional, and constructive manner towards other participants, Logos personnel, and any judges or community members.
-2. Logos reserves the right, in its sole discretion and without liability, to disqualify any Participant, or to disregard any Submission, where it reasonably believes that such Participant or Submission is associated with:
-   1. harassment, discrimination, or abusive conduct;
-   2. plagiarism or misappropriation of others’ work;
-   3. fraud, cheating, or manipulation of the evaluation process; or
-   4. any conduct that undermines the integrity, safety, or reputation of the Program, Logos and its Affiliates, or their respective projects.
+### 9.1
+
+Participants are expected to behave in a respectful, professional, and constructive manner towards other participants, Logos personnel, and any judges or community members.
+
+### 9.2
+
+Logos reserves the right, in its sole discretion and without liability, to disqualify any Participant, or to disregard any Submission, where it reasonably believes that such Participant or Submission is associated with:
+
+(a) harassment, discrimination, or abusive conduct;
+(b) plagiarism or misappropriation of others’ work;
+(c) fraud, cheating, or manipulation of the evaluation process; or
+(d) any conduct that undermines the integrity, safety, or reputation of the Program, Logos and its Affiliates, or their respective projects.
 
 ## 10. Personal data processing
 
-1. Logos shall process personal data submitted in connection with the Program in accordance with its Privacy Policy, as updated from time to time and made available here: [https://logos.co/privacy-policy](https://logos.co/privacy-policy).
-2. In addition to the Privacy Policy and for the specific purposes of the administration of the Program, Logos may process the following personal data, such as a Participant’s name, contact information, GIthub account, social media profiles or links, and any other personal information that might be included as part of a Submission.
-3. If a Participant is awarded a Prize Amount, Logos may further request additional information including: a Participant’s country of residence, wallet address or any other information that may be reasonably required to identify a Participant and to distribute the Prize Amount. This information is necessary to enable Logos to comply with its obligations under applicable law, including sanctions laws.
+### 10.1
+
+Logos shall process personal data submitted in connection with the Program in accordance with its Privacy Policy, as updated from time to time and made available here: [https://logos.co/privacy-policy](https://logos.co/privacy-policy).
+
+### 10.2
+
+In addition to the Privacy Policy and for the specific purposes of the administration of the Program, Logos may process the following personal data, such as a Participant’s name, contact information, GIthub account, social media profiles or links, and any other personal information that might be included as part of a Submission.
+
+### 10.3
+
+If a Participant is awarded a Prize Amount, Logos may further request additional information including: a Participant’s country of residence, wallet address or any other information that may be reasonably required to identify a Participant and to distribute the Prize Amount. This information is necessary to enable Logos to comply with its obligations under applicable law, including sanctions laws.
 
 ## 11. Modifications and changes to the Program
 
-1. Logos reserves the right, at any time and in its sole discretion, to:
-   1. modify these Terms;
-   2. modify any Specification, including any requirements or criteria set out therein;
-   3. modify Prize amounts, including their form and amounts;
-   4. modify or cancel any Prizes; or
-   5. cancel, suspend, or modify the Program.
-2. Logos will communicate material changes to the Program through the λPrize GitHub repository, or other official channels utilised by Logos. The Participant’s continued participation in the Program after the publication of updated Terms or modifications constitutes acceptance of those changes.
+### 11.1
+
+Logos reserves the right, at any time and in its sole discretion, to:
+
+(a) modify these Terms;
+(b) modify any Specification, including any requirements or criteria set out therein;
+(c) modify Prize amounts, including their form and amounts;
+(d) modify or cancel any Prizes; or
+(e) cancel, suspend, or modify the Program.
+
+### 11.2
+
+Logos will communicate material changes to the Program through the λPrize GitHub repository, or other official channels utilised by Logos. The Participant’s continued participation in the Program after the publication of updated Terms or modifications constitutes acceptance of those changes.
 
 ## 12. Participant acknowledgements and additional obligations
 
 Participants acknowledge and agree to the following in connection to their participation in the Program:
 
-1. Participants act independently, voluntarily and at their own initiative in participating in the Program;
-2. Participants have sole discretion over, and are solely responsible for the design, development, review, testing, maintenance and public promotion of any Artefacts that form part of their Submission, including any potential deployment or operation of such Artefacts if they choose to undertake it;
-3. Participants are solely responsible for assessing the risks and implications of their participation in the Programme, including any activity relating to the development of Artefacts that form part of their Submission. This also includes assessing any legal or regulatory implications and complying with any applicable law, rules or regulations;
-4. If Participants choose to deploy, host, operate, use or publicly promote any Artefacts, whether from their own Submission or from other Submissions, they do so at their own risk. Participants remain solely responsible for complying with any legal or regulatory requirements that apply to them, including, where relevant, any licensing, registration, sanctions or anti-money laundering obligations that may arise from operating any software-as-a-service or business;
-5. If Participants issues, offers, promotes or facilitates the issuance of a digital asset in connection with an Artefact, it does so exclusively in its own name and is solely responsible for complying any legal or regulatory requirements.
-6. Participants shall not represent or imply that they, their Artefacts or Submissions are affiliated with, endorsed, approved, built, hosted, maintained, deployed or operated by Logos or its Affiliates.
+(a) Participants act independently, voluntarily and at their own initiative in participating in the Program;
+(b) Participants have sole discretion over, and are solely responsible for the design, development, review, testing, maintenance and public promotion of any Artefacts that form part of their Submission, including any potential deployment or operation of such Artefacts if they choose to undertake it;
+(c) Participants are solely responsible for assessing the risks and implications of their participation in the Programme, including any activity relating to the development of Artefacts that form part of their Submission. This also includes assessing any legal or regulatory implications and complying with any applicable law, rules or regulations;
+(d) If Participants choose to deploy, host, operate, use or publicly promote any Artefacts, whether from their own Submission or from other Submissions, they do so at their own risk. Participants remain solely responsible for complying with any legal or regulatory requirements that apply to them, including, where relevant, any licensing, registration, sanctions or anti-money laundering obligations that may arise from operating any software-as-a-service or business;
+(e) If Participants issues, offers, promotes or facilitates the issuance of a digital asset in connection with an Artefact, it does so exclusively in its own name and is solely responsible for complying any legal or regulatory requirements.
+(f) Participants shall not represent or imply that they, their Artefacts or Submissions are affiliated with, endorsed, approved, built, hosted, maintained, deployed or operated by Logos or its Affiliates.
 
 ## 13. Disclaimers
 
 Logos makes the following disclaimers in relation to the Programme:
 
-1. Nothing in the Program, the Specifications or any communications from Logos or its Affiliates constitutes legal, regulatory, tax, financial or technical advice. Participants should not rely on such communications and must obtain their own independent professional advice.
-2. Logos makes no representations as to the legal or regulatory treatment of any Prizes or activities under the Program in any jurisdiction;
-3. Logos does not endorse or approve any Participant, Artefacts included in any Submission, Submissions or any third party tools or services that may be used by Participants in connection with the Program or any Submission;
-4. Logos makes no representations or warranties regarding the security, quality, functionality, correctness, safety, fitness for purpose or performance of any Artefact included in any Submission;
-5. Logos and its Affiliates do not publish, host or maintain any Artefacts arising out of any Submission;
-6. Logos and its Affiliates do not build, deploy, host, operate or control any Artefacts arising out of any Submission;
-7. Logos and its Affiliates do not, directly or indirectly, (i) facilitate the transfer or exchange of any assets of any person (s) who use any deployed Artefact arising out of any Submission; or (ii) hold custody or control such assets.
+(a) Nothing in the Program, the Specifications or any communications from Logos or its Affiliates constitutes legal, regulatory, tax, financial or technical advice. Participants should not rely on such communications and must obtain their own independent professional advice.
+(b) Logos makes no representations as to the legal or regulatory treatment of any Prizes or activities under the Program in any jurisdiction;
+(c) Logos does not endorse or approve any Participant, Artefacts included in any Submission, Submissions or any third party tools or services that may be used by Participants in connection with the Program or any Submission;
+(d) Logos makes no representations or warranties regarding the security, quality, functionality, correctness, safety, fitness for purpose or performance of any Artefact included in any Submission;
+(e) Logos and its Affiliates do not publish, host or maintain any Artefacts arising out of any Submission;
+(f) Logos and its Affiliates do not build, deploy, host, operate or control any Artefacts arising out of any Submission;
+(g) Logos and its Affiliates do not, directly or indirectly, (i) facilitate the transfer or exchange of any assets of any person (s) who use any deployed Artefact arising out of any Submission; or (ii) hold custody or control such assets.
 
 ## 14. Indemnity and Limitation of Liability
 
-1. The Participant shall indemnify, defend and hold harmless Logos and its Affiliates from and against any and all third‑party claims, liabilities, damages, losses, costs and expenses (including reasonable legal and professional fees) arising out of or in connection with:
-   1. Any breach or inaccuracy of the Participant’s representations and warranties in these Terms;
-   2. The Participant’s participation in, and actions or omissions in connection with the Program (including their Submissions and Artefacts);
-   3. Any breach of the Participant of applicable law or regulation in connection with the Program (including their Submissions and Artefacts); or
-   4. The Participant’s gross negligence, wilful misconduct or fraud in connection with the Program (including their Submissions and Artefacts).
-2. To the maximum extent permitted by applicable law, neither Logos nor its Affiliates will be liable to the Participant under any contract, tort (including negligence), strict liability, or other legal or equitable theory for:
-   1. Any loss of profits, revenue, opportunity, or business;
-   2. Any loss of data or loss of work;
-   3. Any cost of procurement of substitute goods or services; or
-   4. Any indirect, incidental, special, punitive, or consequential damages
+### 14.1
 
-arising out of or in connection with the Program, the Participant’s Submission and Artefacts therein, or these Terms, even if Logos or its Affiliates have been advised of the possibility of such damages.
+The Participant shall indemnify, defend and hold harmless Logos and its Affiliates from and against any and all third‑party claims, liabilities, damages, losses, costs and expenses (including reasonable legal and professional fees) arising out of or in connection with:
+
+(a) Any breach or inaccuracy of the Participant’s representations and warranties in these Terms;
+(b) The Participant’s participation in, and actions or omissions in connection with the Program (including their Submissions and Artefacts);
+(c) Any breach of the Participant of applicable law or regulation in connection with the Program (including their Submissions and Artefacts); or
+(d) The Participant’s gross negligence, wilful misconduct or fraud in connection with the Program (including their Submissions and Artefacts).
+
+### 14.2
+
+To the maximum extent permitted by applicable law, neither Logos nor its Affiliates will be liable to the Participant under any contract, tort (including negligence), strict liability, or other legal or equitable theory for:
+
+(a) Any loss of profits, revenue, opportunity, or business;
+(b) Any loss of data or loss of work;
+(c) Any cost of procurement of substitute goods or services; or
+(d) Any indirect, incidental, special, punitive, or consequential damages arising out of or in connection with the Program, the Participant’s Submission and Artefacts therein, or these Terms, even if Logos or its Affiliates have been advised of the possibility of such damages.
 
 In any event, Logos’ and its Affiliates’ aggregate liability arising out of or in connection with these Terms and the Program shall be limited to CHF 100 (one hundred Swiss Francs).
 
 ## 15. Notices and communications
 
-1. Any notice or other legally binding communication under these Terms must be in writing and sent by email to the official contact address designated by the receiving Party. Notices to Logos should be sent to [ecosystem@logos.co](mailto:ecosystem@logos.co). Logos may update this email address for notices to us by updating these Terms.
-2. Notices to the Participant will be sent to the email address provided in the Submission or subsequently provided in writing. A notice sent by email shall be deemed received at the time of transmission, provided no delivery failure message is received.
-3. All communications and notices to be made or given pursuant to these Terms must be in the English language.
+### 15.1
+
+Any notice or other legally binding communication under these Terms must be in writing and sent by email to the official contact address designated by the receiving Party. Notices to Logos should be sent to [ecosystem@logos.co](mailto:ecosystem@logos.co). Logos may update this email address for notices to us by updating these Terms.
+
+### 15.2
+
+Notices to the Participant will be sent to the email address provided in the Submission or subsequently provided in writing. A notice sent by email shall be deemed received at the time of transmission, provided no delivery failure message is received.
+
+### 15.3
+
+All communications and notices to be made or given pursuant to these Terms must be in the English language.
 
 ## 16. Publicity
 
@@ -218,19 +251,39 @@ Logos or its Affiliates may publicly refer to, describe or publicly promote winn
 
 ## 17. Governing law and disputes
 
-1. These Terms and any non‑contractual obligations arising out of or in connection with them are governed by and shall be construed in accordance with the substantive laws of Switzerland, without regard to its conflict of law rules.
-2. Any dispute, controversy, or claim arising out of or in connection with these Terms, including the validity, invalidity, breach, or termination thereof, that cannot be resolved amicably within a reasonable time shall be referred to and finally resolved by arbitration administered by the Swiss Chambers’ Arbitration Institution in accordance with the Swiss Rules of International Arbitration in force at the time the notice of arbitration is submitted.
-   1. The seat of arbitration shall be Zug, Switzerland.
-   2. The arbitral tribunal shall consist of one arbitrator.
-   3. The language of the arbitration shall be English.
-   4. The arbitration proceedings and all related communications shall be confidential to the extent permitted by law.
+### 17.1
+
+These Terms and any non‑contractual obligations arising out of or in connection with them are governed by and shall be construed in accordance with the substantive laws of Switzerland, without regard to its conflict of law rules.
+
+### 17.2
+
+Any dispute, controversy, or claim arising out of or in connection with these Terms, including the validity, invalidity, breach, or termination thereof, that cannot be resolved amicably within a reasonable time shall be referred to and finally resolved by arbitration administered by the Swiss Chambers’ Arbitration Institution in accordance with the Swiss Rules of International Arbitration in force at the time the notice of arbitration is submitted.
+
+(a) The seat of arbitration shall be Zug, Switzerland.
+(b) The arbitral tribunal shall consist of one arbitrator.
+(c) The language of the arbitration shall be English.
+(d) The arbitration proceedings and all related communications shall be confidential to the extent permitted by law.
 
 Participants waive, to the fullest extent permitted by applicable law, any right to participate in any class, collective, or representative action against Logos and its Affiliates in relation to the Program.
 
 ## 18. Miscellaneous
 
-1. These Terms, together with any documents referred to in them, constitute the entire agreement between the Parties in relation to the subject matter hereof and supersede all previous agreements, arrangements, understandings between the Parties with respect hereto.
-2. If any provision of these Terms is held to be invalid, illegal, or unenforceable, the remaining provisions shall remain in full force and effect.
-3. No failure or delay by Logos in exercising any right or remedy under these Terms shall operate as a waiver thereof.
-4. Participants shall not assign or transfer any of their rights or obligations under these Terms without Logos’ prior written consent. Logos may assign or transfer its rights and obligations under these Terms to any of its Affiliates.
-5. There are no representations, warranties, terms, conditions, undertakings or understanding, express or implied, between the Parties other than those expressly set forth in these Terms.
+### 18.1
+
+These Terms, together with any documents referred to in them, constitute the entire agreement between the Parties in relation to the subject matter hereof and supersede all previous agreements, arrangements, understandings between the Parties with respect hereto.
+
+### 18.2
+
+If any provision of these Terms is held to be invalid, illegal, or unenforceable, the remaining provisions shall remain in full force and effect.
+
+### 18.3
+
+No failure or delay by Logos in exercising any right or remedy under these Terms shall operate as a waiver thereof.
+
+### 18.4
+
+Participants shall not assign or transfer any of their rights or obligations under these Terms without Logos’ prior written consent. Logos may assign or transfer its rights and obligations under these Terms to any of its Affiliates.
+
+### 18.5
+
+There are no representations, warranties, terms, conditions, undertakings or understanding, express or implied, between the Parties other than those expressly set forth in these Terms.
