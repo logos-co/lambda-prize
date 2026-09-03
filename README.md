@@ -40,7 +40,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Closed                       |
 | [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation                | Large  | Closed ([Solution](solutions/LP-0016.md)) |
 | [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Closed ([Solution](solutions/LP-0017.md)) |
-| [LP-0025](prizes/LP-0025.md) | Private DAO: proposal lifecycle, deliberation, and delegation | Large  | Draft                        |
+| [LP-0019](prizes/LP-0019.md) | Private DAO: proposal lifecycle, deliberation, and delegation | Large  | Open                        |
 
 ### Proposing a New Prize
 
