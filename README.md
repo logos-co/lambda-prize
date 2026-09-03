@@ -1,6 +1,8 @@
 # **λ**Prize
 
-The Logos **λ**Prize program offers competitive prizes for building on the Logos stack. Browse all prizes below.
+Logos seeks to support and promote development on the Logos technology stack, which has been made available as open-source infrastructure for independent use by developers and the wider community. As such, Logos has developed the Logos **λ**Prize Program (“**λPrize**”), a voluntary, criteria-based, discretionary prize initiative where Participants may be awarded for independently developing and submitting innovative solutions that benefit the Logos ecosystem through reusable open-source work and credible “social-proof” of ecosystem progress.
+
+The administrator of **λ**Prize is the Logos Collective Association, an association registered in Switzerland (the “**Association**”). The Association has a limited role in this regard, which includes determining and setting out the relevant Prizes available and the corresponding criteria that submissions need to fulfill. It also evaluates submissions and determines whether they meet the criteria to potentially win a Prize amount and also distributes any awarded Prize amounts.
 
 > [!NOTE]
 > By participating in **λ**Prize, including by submitting a solution or pull request, you agree to the [Terms & Conditions](TERMS.md). Please read them before submitting.
@@ -9,7 +11,7 @@ The Logos **λ**Prize program offers competitive prizes for building on the Logo
 
 [Logos](https://logos.co) is a social movement and decentralised technology stack.
 
-The Logos stack comprises three core layers:
+The Logos technology stack comprises three core layers:
 
 - **Blockchain** - A privacy-preserving Layer 1 for execution, settlement, and coordination. The **Logos Execution Zone (LEZ)** is the programmable environment where decentralised applications run, featuring a unique separation of public and private state with shielded balances and private state as first-class primitives.
 - **Storage** - Durable, censorship-resistant data availability powering fully decentralised apps and file sharing.
@@ -20,6 +22,8 @@ Together these form a unified, modular ecosystem, accessible through **Logos Cor
 ## Prizes
 
 All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
+
+Prizes are typically defined through an analysis of gaps in the Logos technology stack and its ecosystem. This analysis refers to categories of infrastructure and applications commonly found in mature blockchain systems and their ecosystems as well as the technical dependencies between components.
 
 λPrize is moving from its original **build-and-review** model to an **adoption-first** model. Which scheme a prize follows is shown in the tables below.
 
@@ -88,7 +92,7 @@ The following policies apply to **all** prizes unless a specific prize states ot
 
 **Submissions.** A solution PR in this repository is required to claim any prize. Each builder (or team) is allowed a maximum of **3 submissions** per prize, with at most **one submission/review per week**.
 
-**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria, and on the **Adoption** section for adoption-first prizes. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders.
+**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria, and on the **Adoption** section for adoption-first prizes. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders. Logos’ feedback in this regard is meant to just be helpful guidance and not intended to be any particular approval or endorsement of any particular submission or any representation or warranty about its safety, reliability or fitness for any particular purpose.
 
 **Demo requirements.** For **legacy** prizes, every submission that requires a demo must include a narrated video walkthrough in which the builder explains what they built and why, walks through the architecture and key implementation decisions, and demonstrates the full end-to-end flow. A silent screencast without explanation is not sufficient. Prize-specific demo content is listed in each prize's **Submission Requirements**. For **adoption-first** prizes, a narrated demo is optional unless the prize's Submission Requirements say otherwise.
 
@@ -130,23 +134,17 @@ If **privacy** is a concern, we recommend using a **single-use Ethereum address*
 
 All participants are bound by the [Terms & Conditions](TERMS.md). Key points:
 
+- Participants are ultimately responsible for their submissions and artefacts included in such submissions
 - Submissions must be dual licensed under the MIT License and Apache License 2.0.
-- One submission per prize per participant/team.
+- Up to three submissions per prize per participant/team.
 - Logos retains sole discretion over evaluation and prize awards.
 - Submissions are public and non-confidential.
+- The Association does not endorse, approve them and provides no representations or warranties regarding their safety, reliability or fitness for any particular purpose. In any event, Association’s liability is limited.
 - See the full [Terms & Conditions](TERMS.md) for eligibility, IP, liability, and other provisions.
 
 ## License
 
-Licensed under either of
+Any submissions made by participants in **λ**Prize will be dual licenced under the following two open source licences
 
-- [Apache License, Version 2.0](LICENSE-APACHE) or [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
-- [MIT License](LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT)
-
-at your option.
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
+(i) [Apache License, Version 2.0](LICENSE-APACHE) or [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0) and
+(ii) [MIT License](LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT)
