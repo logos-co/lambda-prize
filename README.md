@@ -140,6 +140,7 @@ All participants are bound by the [Terms & Conditions](TERMS.md). Key points:
 
 - Participants are ultimately responsible for their submissions and artefacts included in such submissions
 - Submissions must be dual licensed under the MIT License and Apache License 2.0.
+- One submission per week per prize per participant/team.
 - Logos retains sole discretion over evaluation and prize awards.
 - Submissions are public and non-confidential.
 - The Association does not endorse, approve them and provides no representations or warranties regarding their safety, reliability or fitness for any particular purpose. In any event, Association’s liability is limited.
