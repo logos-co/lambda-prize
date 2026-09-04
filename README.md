@@ -1,6 +1,8 @@
 # **λ**Prize
 
-The Logos **λ**Prize program offers competitive prizes for building on the Logos stack. Browse all prizes below.
+Logos seeks to support and promote development on the Logos technology stack, which has been made available as open-source infrastructure for independent use by developers and the wider community. As such, Logos has developed the Logos **λ**Prize Program (“**λPrize**”), a voluntary, criteria-based, discretionary prize initiative where Participants may be awarded for independently developing and submitting innovative solutions that benefit the Logos ecosystem through reusable open-source work and credible “social-proof” of ecosystem progress.
+
+The administrator of **λ**Prize is the Logos Collective Association, an association registered in Switzerland (the “**Association**”). The Association has a limited role in this regard, which includes determining and setting out the relevant Prizes available and the corresponding criteria that submissions need to fulfill. It also evaluates submissions and determines whether they meet the criteria to potentially win a Prize amount and also distributes any awarded Prize amounts.
 
 > [!NOTE]
 > By participating in **λ**Prize, including by submitting a solution or pull request, you agree to the [Terms & Conditions](TERMS.md). Please read them before submitting.
@@ -9,7 +11,7 @@ The Logos **λ**Prize program offers competitive prizes for building on the Logo
 
 [Logos](https://logos.co) is a social movement and decentralised technology stack.
 
-The Logos stack comprises three core layers:
+The Logos technology stack comprises three core layers:
 
 - **Blockchain** - A privacy-preserving Layer 1 for execution, settlement, and coordination. The **Logos Execution Zone (LEZ)** is the programmable environment where decentralised applications run, featuring a unique separation of public and private state with shielded balances and private state as first-class primitives.
 - **Storage** - Durable, censorship-resistant data availability powering fully decentralised apps and file sharing.
@@ -20,6 +22,8 @@ Together these form a unified, modular ecosystem, accessible through **Logos Cor
 ## Prizes
 
 All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
+
+Prizes are typically defined through an analysis of gaps in the Logos technology stack and its ecosystem. This analysis refers to categories of infrastructure and applications commonly found in mature blockchain systems and their ecosystems as well as the technical dependencies between components.
 
 λPrize is moving from its original **build-and-review** model to an **adoption-first** model. Which scheme a prize follows is shown in the tables below.
 
@@ -84,11 +88,11 @@ A solution PR in this repository is required to claim any prize, including **ado
 
 ### Evaluation Policies
 
-The following policies apply to **all** prizes unless a specific prize states otherwise. **Adoption-first** prizes are also evaluated against their **Adoption** section. Authors are expected to include evidence and supporting data for those criteria in the solution PR.
+The following policies apply to **all** prizes unless a specific prize states otherwise. **Adoption-first** prizes are also evaluated against their **Adoption** section. Participants are expected to include evidence and supporting data for those criteria in the solution PR.
 
 **Submissions.** A solution PR in this repository is required to claim any prize. Each builder (or team) is allowed a maximum of **3 submissions** per prize, with at most **one submission/review per week**.
 
-**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria, and on the **Adoption** section for adoption-first prizes. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders.
+**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria, and on the **Adoption** section for adoption-first prizes. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders. Logos’ feedback in this regard is meant to just be helpful guidance and not intended to be any particular approval or endorsement of any particular submission or any representation or warranty about its safety, reliability or fitness for any particular purpose.
 
 **Demo requirements.** For **legacy** prizes, every submission that requires a demo must include a narrated video walkthrough in which the builder explains what they built and why, walks through the architecture and key implementation decisions, and demonstrates the full end-to-end flow. A silent screencast without explanation is not sufficient. Prize-specific demo content is listed in each prize's **Submission Requirements**. For **adoption-first** prizes, a narrated demo is optional unless the prize's Submission Requirements say otherwise.
 
@@ -100,9 +104,13 @@ This FAQ covers the current Lambda Prize (LP) scheme that includes adoption-base
 
 Build something useful on the Logos stack, share it, and let other builders pick it up if it helps them. When that usage is real — independent modules, on-chain activity, or whatever the prize lists — open a **solution PR** with evidence. Remember that meeting a number without a solution PR in this repository does not establish priority.
 
+### Why include an adoption criteria?
+
+It’s a criteria through which it can demonstrate a submission’s actual usefulness to not only the Logos technology stack but also to the wider community. As such, any adoption metrics are intended to demonstrate a submissions’s real world-interest and the extent to which others are building on, testing, or experimenting with a submission. Though we do want to flag that anyone interacting with such submissions should do so cautiously and treat them as unverified code. The Association does not endorse, approve them and does not guarantee that they are safe, reliable, or fit for any particular purpose.
+
 ### Where do I share my work before I hit the adoption?
 
-This repository is the place you claim a prize, not a showcase while you are still building or trying to get users/integrations. **Discord is currently the main community hub.** Share what you are building towards a λPrize there, look for collaborators and people who might use it, and follow other builders in **#builder-hub**. The [Logos Forum](https://forum.logos.co/) is another community space for longer-form discussion. Additional discovery platforms may be introduced in the future, but for now, make sure to participate actively on Discord. Being engaged in the community and becoming a trusted resource for others is also an important part of what this program indirectly funds.
+This repository is the place you claim a prize, not a showcase while you are still building or trying to get users/integrations. **Discord is currently the main community hub.** Share what you are building towards a λPrize there, look for collaborators and people who might use it, and follow other builders in **#builder-hub**. The [Logos Forum](https://forum.logos.co/) is another community space for longer-form discussion. Additional discovery platforms may be introduced in the future, but for now, make sure to participate actively on Discord. Being engaged in the community and becoming a trusted resource for others is also an important part of what this program indirectly funds. Just remember, you are ultimately responsible for what you build and any promotion you might have around that.
 
 ### Should I chase the adoption criteria as soon as the code works?
 
@@ -130,23 +138,17 @@ If **privacy** is a concern, we recommend using a **single-use Ethereum address*
 
 All participants are bound by the [Terms & Conditions](TERMS.md). Key points:
 
+- Participants are ultimately responsible for their submissions and artefacts included in such submissions
 - Submissions must be dual licensed under the MIT License and Apache License 2.0.
-- One submission per prize per participant/team.
+- One submission per week per prize per participant/team.
 - Logos retains sole discretion over evaluation and prize awards.
 - Submissions are public and non-confidential.
+- The Association does not endorse, approve them and provides no representations or warranties regarding their safety, reliability or fitness for any particular purpose. In any event, Association’s liability is limited.
 - See the full [Terms & Conditions](TERMS.md) for eligibility, IP, liability, and other provisions.
 
 ## License
 
-Licensed under either of
+Any submissions made by participants in **λ**Prize will be dual licenced under the following two open source licences
 
-- [Apache License, Version 2.0](LICENSE-APACHE) or [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
-- [MIT License](LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT)
-
-at your option.
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
+(i) [Apache License, Version 2.0](LICENSE-APACHE) or [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0) and
+(ii) [MIT License](LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT)
