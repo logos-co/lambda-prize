@@ -35,6 +35,7 @@ Prizes are typically defined through an analysis of gaps in the Logos technology
 | File | Description | Size | Status |
 |------|-------------|------|--------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
+| [LP-0023](prizes/LP-0023.md) | LEZ Program Registry                                     | Small  | Open                         |
 
 ### Legacy prizes (original scheme)
 
