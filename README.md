@@ -31,7 +31,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | File | Description | Size | Status |
 |------|-------------|------|--------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
-| [LP-0021](prizes/LP-0021.md) | LEZ Zone Wallet and SDK                                   | X-Large | Draft                         |
+| [LP-0021](prizes/LP-0021.md) | LEZ Wallet and Provider SDK                               | X-Large | Draft                         |
 | [LP-0022](prizes/LP-0022.md) | Combined Blockchain and Zone Wallet                       | Large  | Draft                         |
 
 ### Legacy prizes (original scheme)
