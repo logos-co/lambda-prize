@@ -21,45 +21,36 @@ Together these form a unified, modular ecosystem, accessible through **Logos Cor
 
 ## Prizes
 
-All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
+All prizes live in the [`prizes/`](prizes/) directory. Each prize is a markdown file following the `LP-XXXX` naming convention.
 
 Prizes are typically defined through an analysis of gaps in the Logos technology stack and its ecosystem. This analysis refers to categories of infrastructure and applications commonly found in mature blockchain systems and their ecosystems as well as the technical dependencies between components.
 
-λPrize is moving from its original **build-and-review** model to an **adoption-first** model. Which scheme a prize follows is shown in the tables below.
-
-- **Adoption-first prizes** are graded on a functionality gate **plus** adoption criteria (real third-party usage, on-chain coverage or activity, and human/social validation where the prize lists it). Manual code review is not the primary gate. See each prize's **Adoption** section for the dimensions we look at. See FAQ below for more details.
-- **Legacy prizes** follow the original first-come-first-served, manual-review model. The last open legacy prizes closed on 11 September 2026; in-flight submissions are still being evaluated (see below).
-
-### Adoption-first prizes (current scheme)
+Prizes are graded on a functionality gate **plus** adoption criteria (real third-party usage, on-chain coverage or activity, and human/social validation where the prize lists it). Manual code review is not the primary gate. See each prize's **Adoption** section for the dimensions we look at, and the FAQ below.
 
 | File | Description | Size | Status |
 |------|-------------|------|--------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
 | [LP-0018](prizes/LP-0018.md) | OpenStreetMap integration: decentralized map data distribution | Medium | Open |
 
-### Legacy prizes (original scheme)
+### Earlier prizes
 
-| File                         | Description                                              | Size   | Status                       |
-|------------------------------|----------------------------------------------------------|--------|------------------------------|
-| [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | —      | —                            |
-| [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof                              | Medium | Draft                        |
-| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  | Large  | Closed                       |
-| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Medium | Closed                       |
-| [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances               | Large  | Draft                        |
-| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                        | Large  | Closed ([Solution](solutions/LP-0005.md)) |
-| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large  | Closed                       |
-| [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        | Small  | Closed ([Solution](solutions/LP-0009.md)) |
-| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Closed ([Solution](solutions/LP-0010.md)) |
-| [LP-0011](prizes/LP-0011.md) | Program development tooling: Rust SDK                    | Medium | Draft                        |
-| [LP-0012](prizes/LP-0012.md) | Event/Log mechanism                                      | Large  | Closed ([Solution](solutions/LP-0012.md)) |
-| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities)                 | Medium | Closed ([Solution](solutions/LP-0013.md)) |
-| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling)       | Medium | Closed                       |
-| [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls               | Large  | Closed                       |
-| [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation                | Large  | Closed ([Solution](solutions/LP-0016.md)) |
-| [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Closed ([Solution](solutions/LP-0017.md)) |
+> [!NOTE]
+> These prizes used a previous build-and-review model and are closed to new submissions. In-flight submissions to **LP-0002**, **LP-0003**, and **LP-0008** received before 11 September 2026 are still being evaluated.
 
-> [!IMPORTANT]
-> **Legacy scheme wind-down.** To make room for adoption-first prizes, **LP-0002**, **LP-0003**, and **LP-0008** closed on **11 September 2026 at 23:59 CEST**. No new submissions are accepted. In-flight submissions received before the deadline are still being evaluated. 
+| File | Description | Size | Status |
+|------|-------------|------|--------|
+| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig | Large | Closed |
+| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor | Medium | Closed |
+| [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation | Large | Closed ([Solution](solutions/LP-0005.md)) |
+| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large | Closed |
+| [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy | Small | Closed ([Solution](solutions/LP-0009.md)) |
+| [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept | Small | Closed ([Solution](solutions/LP-0010.md)) |
+| [LP-0012](prizes/LP-0012.md) | Event/Log mechanism | Large | Closed ([Solution](solutions/LP-0012.md)) |
+| [LP-0013](prizes/LP-0013.md) | Token program improvements (authorities) | Medium | Closed ([Solution](solutions/LP-0013.md)) |
+| [LP-0014](prizes/LP-0014.md) | Token program improvements (ATAs + wallet tooling) | Medium | Closed |
+| [LP-0015](prizes/LP-0015.md) | General cross-program calls via tail calls | Large | Closed |
+| [LP-0016](prizes/LP-0016.md) | Anonymous Forum with Threshold Moderation | Large | Closed ([Solution](solutions/LP-0016.md)) |
+| [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app | Medium | Closed ([Solution](solutions/LP-0017.md)) |
 
 ### Proposing a New Prize
 
@@ -69,11 +60,7 @@ Prizes can currently only be proposed by Logos CCs. A separate process for sourc
 2. Fill in all sections except **Prize Structure** (prize pool, revision date) — these are determined by the Logos team.
 3. Open a pull request titled `LP-XXXX: <Prize Title>`.
 
-Evaluation criteria are:
-- first-come-first-served: the first **solution PR** that meets all success criteria wins.
-- **adoption-first** as listed in **Adoption** section of a prize.
-
-The first to meet them and open a solution PR (with supporting evidence) wins. Meeting the criteria without a solution PR in this repository does not establish priority. Single winner unless otherwise specified in the prize.
+The first **solution PR** that meets the success criteria and the prize's **Adoption** section wins. Meeting the criteria without a solution PR in this repository does not establish priority. Single winner unless otherwise specified in the prize.
 
 ### Submitting a Solution
 
@@ -83,23 +70,21 @@ Solutions live in the `[solutions/](solutions/)` directory. To submit a solution
 2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials. The implementation must be dual licensed under the MIT License **and** Apache License 2.0.
 3. Open a pull request titled `Solution: LP-XXXX — <Short Description>`.
 
-To meet **adoption-first** criteria, the solution PR must include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
+The solution PR must include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
 
-A solution PR in this repository is required to claim any prize, including **adoption-first** prizes. If multiple solutions target the same prize, the first solution PR that satisfies all success criteria wins unless specified otherwise. For **adoption-first** prizes that includes the Adoption criteria. Meeting the criteria without a solution PR does not establish priority. A solution PR is timestamped by its opening date.
+A solution PR in this repository is required to claim a prize. If multiple solutions target the same prize, the first solution PR that satisfies all success criteria and the Adoption criteria wins unless specified otherwise. Meeting the criteria without a solution PR does not establish priority. A solution PR is timestamped by its opening date.
 
 ### Evaluation Policies
 
-The following policies apply to **all** prizes unless a specific prize states otherwise. **Adoption-first** prizes are also evaluated against their **Adoption** section. Participants are expected to include evidence and supporting data for those criteria in the solution PR.
+The following policies apply to **all** prizes unless a specific prize states otherwise. Prizes are also evaluated against their **Adoption** section. Participants are expected to include evidence and supporting data for those criteria in the solution PR.
 
 **Submissions.** A solution PR in this repository is required to claim any prize. Each builder (or team) is allowed a maximum of **3 submissions** per prize, with at most **one submission/review per week**.
 
-**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria, and on the **Adoption** section for adoption-first prizes. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders. Logos’ feedback in this regard is meant to just be helpful guidance and not intended to be any particular approval or endorsement of any particular submission or any representation or warranty about its safety, reliability or fitness for any particular purpose.
+**Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria and the **Adoption** section. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders. Logos’ feedback in this regard is meant to just be helpful guidance and not intended to be any particular approval or endorsement of any particular submission or any representation or warranty about its safety, reliability or fitness for any particular purpose.
 
-**Demo requirements.** For **legacy** prizes, every submission that requires a demo must include a narrated video walkthrough in which the builder explains what they built and why, walks through the architecture and key implementation decisions, and demonstrates the full end-to-end flow. A silent screencast without explanation is not sufficient. Prize-specific demo content is listed in each prize's **Submission Requirements**. For **adoption-first** prizes, a narrated demo is optional unless the prize's Submission Requirements say otherwise.
+**Demo requirements.** A narrated demo is optional unless the prize's Submission Requirements say otherwise. Prize-specific demo content is listed in each prize's **Submission Requirements**.
 
 ## FAQ
-
-This FAQ covers the current Lambda Prize (LP) scheme that includes adoption-based criteria.
 
 ### How is this meant to work?
 
