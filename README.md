@@ -28,7 +28,7 @@ Prizes are typically defined through an analysis of gaps in the Logos technology
 λPrize is moving from its original **build-and-review** model to an **adoption-first** model. Which scheme a prize follows is shown in the tables below.
 
 - **Adoption-first prizes** are graded on a functionality gate **plus** adoption criteria (real third-party usage, on-chain coverage or activity, and human/social validation where the prize lists it). Manual code review is not the primary gate. See each prize's **Adoption** section for the dimensions we look at. See FAQ below for more details.
-- **Legacy prizes** follow the original first-come-first-served, manual-review model. The remaining live legacy prizes are being wound down (see below).
+- **Legacy prizes** follow the original first-come-first-served, manual-review model. The last open legacy prizes closed on 11 September 2026; in-flight submissions are still being evaluated (see below).
 
 ### Adoption-first prizes (current scheme)
 
@@ -43,11 +43,11 @@ Prizes are typically defined through an analysis of gaps in the Logos technology
 |------------------------------|----------------------------------------------------------|--------|------------------------------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | —      | —                            |
 | [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof                              | Medium | Draft                        |
-| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  | Large  | Open (closes 11 Sep 2026, 23:59 CEST) |
-| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Medium | Open (closes 11 Sep 2026, 23:59 CEST) |
+| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  | Large  | Closed                       |
+| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Medium | Closed                       |
 | [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances               | Large  | Draft                        |
 | [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation                        | Large  | Closed ([Solution](solutions/LP-0005.md)) |
-| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large  | Open (closes 11 Sep 2026, 23:59 CEST) |
+| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large  | Closed                       |
 | [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy                        | Small  | Closed ([Solution](solutions/LP-0009.md)) |
 | [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept                  | Small  | Closed ([Solution](solutions/LP-0010.md)) |
 | [LP-0011](prizes/LP-0011.md) | Program development tooling: Rust SDK                    | Medium | Draft                        |
@@ -59,7 +59,7 @@ Prizes are typically defined through an analysis of gaps in the Logos technology
 | [LP-0017](prizes/LP-0017.md) | Whistleblower: document upload and indexing Basecamp app     | Medium | Closed ([Solution](solutions/LP-0017.md)) |
 
 > [!IMPORTANT]
-> **Legacy scheme wind-down.** To make room for adoption-first prizes, **LP-0002**, **LP-0003**, and **LP-0008** close on **11 September 2026 at 23:59 CEST**. No new submissions will be accepted after that time. If you have already submitted a solution, yours will be reviewed first. In-flight submissions received before the deadline will still be evaluated. Prizes already marked *Closed* are unaffected. 
+> **Legacy scheme wind-down.** To make room for adoption-first prizes, **LP-0002**, **LP-0003**, and **LP-0008** closed on **11 September 2026 at 23:59 CEST**. No new submissions are accepted. In-flight submissions received before the deadline are still being evaluated. 
 
 ### Proposing a New Prize
 
