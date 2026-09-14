@@ -31,6 +31,7 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | File | Description | Size | Status |
 |------|-------------|------|--------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
+| [LP-0001](prizes/LP-0001.md) | NFT Wallet Support and Private Ownership Proof            | Medium | Draft                         |
 | [LP-0021](prizes/LP-0021.md) | LEZ Wallet and Provider SDK                               | X-Large | Draft                         |
 | [LP-0022](prizes/LP-0022.md) | Combined Blockchain and Zone Wallet                       | Large  | Draft                         |
 
@@ -39,7 +40,6 @@ All prizes live in the `[prizes/](prizes/)` directory. Each prize is a markdown 
 | File                         | Description                                              | Size   | Status                       |
 |------------------------------|----------------------------------------------------------|--------|------------------------------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | —      | —                            |
-| [LP-0001](prizes/LP-0001.md) | Private NFT Ownership Proof                              | Medium | Draft                        |
 | [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig                                  | Large  | Open (closes 11 Sep 2026, 23:59 CEST) |
 | [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor                  | Medium | Open (closes 11 Sep 2026, 23:59 CEST) |
 | [LP-0004](prizes/LP-0004.md) | Sealed-Bid Auction Using Shielded Balances               | Large  | Draft                        |
