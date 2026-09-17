@@ -85,6 +85,8 @@ The following policies apply to **all** prizes unless a specific prize states ot
 
 **Demo requirements.** A narrated demo is optional unless the prize's Submission Requirements say otherwise. Prize-specific demo content is listed in each prize's **Submission Requirements**.
 
+**Logos CCs.** Service providers of Logos, including their contractors and sub-contractors (“Logos CCs”) are not permitted to participate in λPrize in any capacity. Submissions from Logos CCs will be rejected. For the purposes of the adoption criteria, Logos CCs will not be counted when determining whether a Submission has met such criteria.
+
 ## FAQ
 
 ### How is this meant to work?
@@ -127,7 +129,6 @@ All participants are bound by the [Terms & Conditions](TERMS.md). Key points:
 
 - Participants are ultimately responsible for their submissions and artefacts included in such submissions
 - Submissions must be dual licensed under the MIT License and Apache License 2.0.
-- One submission per week per prize per participant/team.
 - Logos retains sole discretion over evaluation and prize awards.
 - Submissions are public and non-confidential.
 - The Association does not endorse, approve them and provides no representations or warranties regarding their safety, reliability or fitness for any particular purpose. In any event, Association’s liability is limited.
