@@ -1,6 +1,6 @@
 # λPrize Program – Terms & Conditions
 
-*Last updated: 27 August 2026*
+*Last updated: 17 September 2026*
 
 These Terms and Conditions (“**Terms**”) are entered into by and between Logos Collective Association, Baarerstrasse 10, 6300 Zug, Switzerland (“Logos”, “we”, “us”) and any individual or legal entity participating in the λPrize Program, including by submitting any solution (“you”, “Participant”) (each a “Party” and together the “Parties”).
 
@@ -18,7 +18,11 @@ Through the Program, participants may independently develop and submit innovativ
 
 Logos acts solely as the administrator of the Program, which includes, determining and setting out the relevant Specifications, evaluating and selecting a winning Submission, the award of a Prize amount and any other activities in support of the Program. Please also refer to the additional disclaimers around Logos (and its Affiliates’) role in clause 13 of these Terms.
 
-**Prizes:** The Program comprises multiple prizes (each a “**Prize**”) for which Participants may be eligible and these are further described in the λPrize GitHub repository. Prizes are typically defined through an analysis of gaps in the Logos technology stack and its ecosystem. This analysis refers to categories of infrastructure and applications commonly found in mature blockchain systems and their ecosystems as well as the technical dependencies between components. Please also refer to the conditions of the Prize in the Specification and also clauses 7 (Evaluation and judging) clause 8 (Prizes).
+**Prizes:** The Program comprises multiple prizes (each a “**Prize**”) for which Participants may be eligible and these are further described in the λPrize GitHub repository. Prizes are typically defined through an analysis of gaps in the Logos technology stack and its ecosystem. This analysis refers to categories of infrastructure and applications commonly found in mature blockchain systems and their ecosystems as well as the technical dependencies between components.
+
+Prizes may also refer to different Prizes or its Specifications. These are referred to solely for the purposes of identifying criteria applicable to an Artefact of a Submission that may need to also be developed and included as part of a Submission for that Prize. Such references do not require nor direct a Participant to use, extend, modify or otherwise rely on any previous code, implementation, Artefact or Submission associated with the referenced Prize or Specification. Where such references are made, it is up to the Participant to determine how best to develop or incorporate an Artefact to satisfy the relevant Specifications of the current Prize, whether to develop it themselves or otherwise.
+
+Please also refer to the conditions of the Prize in the Specification and also clauses 7 (Evaluation and judging) clause 8 (Prizes).
 
 **Specifications:** Each Prize has a separate specification (“**Specification**”) which sets out, among others, its motivation, criteria, scope, the Prize amount and eligibility requirements. The Specifications are guided by existing approaches and implementations in other mature blockchain systems and their ecosystems, as well as by functional requirements particular to the Logos technology stack or perceived usefulness to the Logos ecosystem and community building on the Logos technology stack. Considerations may include open-source delivery, trust minimisation and a non-custodial design, however, these are indicative rather than exhaustive and any given Prize may reflect further or more specific considerations.
 
@@ -55,14 +59,16 @@ These Terms do not create any contract for services, employment relationship, pa
 
 ## 4. Eligibility & representations
 
-By participating in the Program or making a Submission, the Participant represents to Logos that:
+By participating in the Program or making a Submission, the Participant represents and warrants to Logos that:
 
 (a) The Participant has full legal capacity and authority to enter into these Terms and to make the Submission, and, where applicable, the individual acting is duly authorised to bind any entity on whose behalf the Submission is made.
 (b) These Terms constitute a legal, valid, and binding obligation, enforceable against the Participant in accordance with their terms.
-(c) All information provided by the Participant in connection with the Program (including registration details and any information in or relating to a Submission) is true, accurate, complete, and not misleading in any material respect at the time provided, and the Participant will promptly notify Logos if it becomes inaccurate or incomplete.
-(d) The Participant shall comply with all laws applicable to itself and its activities in connection with the Program,
-(e) Neither the Participant, or if the Participant is an entity, its directors, officers, or beneficial owners is a Sanctioned Person or in violation of any Sanctions, and the Participant shall not engage in any activity in connection with the Program that would cause Logos to violate any Sanctions.
-(f) The Submission is the Participant’s work (or that of the Participant’s team) and the Participant hs the right to submit it, and it does not infringe the intellectual property rights or other rights of any third party.
+(c) All information provided by the Participant in connection with the Program (including registration details and any information in or relating to a Submission) is true, accurate, complete, and not misleading in any material respect at the time provided.
+(d) Neither the Participant, or if the Participant is an entity, its directors, officers, or beneficial owners is a Sanctioned Person or in violation of any Sanctions, and the Participant shall not engage in any activity in connection with the Program that would cause Logos to violate any Sanctions;
+(e) The Submission is the Participant’s work (or that of the Participant’s team) and the Participant has the right to submit it, and it does not infringe the intellectual property rights or other rights of any third party; and
+(f) The Participant is not an individual or entity engaged by a service provider of Logos, or by any subcontractor of such service provider.
+
+The Participant acknowledges that their participation in the Program is on the basis that the above representations and warranties are true and correct. If any of these representations and warranties provided by the Participant is or becomes untrue or inaccurate, the Participant is and will not be eligible for participation in the Program, and Logos may prevent, disqualify or terminate the participation of the Participant in the Program at any time.
 
 ## 5. Submissions
 
@@ -137,7 +143,7 @@ Logos has no obligation to compensate a Participant for their time, effort, or e
 
 Logos may require the Participant who made the winning Submission to provide (additional) identifying and other information as a condition of distribution of a Prize amount.
 
-Logos may decline to distribute a Prize amount where such information is not provided, is incomplete or misleading, where the Participant fails to comply with Logoss’ instructions or where awarding or distributing a Prize amount may expose Logos to legal, regulatory, financial, or reputational risk.
+Logos may decline to distribute a Prize amount where such information is not provided, is incomplete or misleading, where the Participant fails to comply with Logos’s instructions or where awarding or distributing a Prize amount may expose Logos to legal, regulatory, financial, or reputational risk.
 
 ### 8.3. Taxes
 
@@ -176,18 +182,23 @@ Successful Participants are solely responsible for any tax obligations, reportin
 
 ## 12. Participant acknowledgements and additional obligations
 
-Participants acknowledge and agree to the following in connection to their participation in the Program:
+Participants acknowledge, in connection with their participation in the Program, that they are solely responsible for:
 
-(a) Participants act independently, voluntarily and at their own initiative in participating in the Program;
-(b) Participants have sole discretion over, and are solely responsible for the design, development, review, testing, maintenance and public promotion of any Artefacts that form part of their Submission, including any potential deployment or operation of such Artefacts if they choose to undertake it;
-(c) Participants are solely responsible for assessing the risks and implications of their participation in the Programme, including any activity relating to the development of Artefacts that form part of their Submission. This also includes assessing any legal or regulatory implications and complying with any applicable law, rules or regulations;
-(d) If Participants choose to deploy, host, operate, use or publicly promote any Artefacts, whether from their own Submission or from other Submissions, they do so at their own risk. Participants remain solely responsible for complying with any legal or regulatory requirements that apply to them, including, where relevant, any licensing, registration, sanctions or anti-money laundering obligations that may arise from operating any software-as-a-service or business;
-(e) If Participants issues, offers, promotes or facilitates the issuance of a digital asset in connection with an Artefact, it does so exclusively in its own name and is solely responsible for complying any legal or regulatory requirements.
-(f) Participants shall not represent or imply that they, their Artefacts or Submissions are affiliated with, endorsed, approved, built, hosted, maintained, deployed or operated by Logos or its Affiliates.
+(a) The design, development, review, testing, maintenance and public promotion of any Artefacts that form part of their Submission, including any potential deployment or operation of such Artefacts if they choose to undertake it;
+(b) Assessing the risks and implications of their participation in the Program, including any activity relating to the development of Artefacts that form part of their Submission. This also includes assessing any legal or regulatory implications and complying with any applicable law, rules or regulations;
+(c) Deciding whether, if at all, to deploy, host, operate, use or publicly promote any Artefacts, whether from their own Submission or from other Submissions and they do so at their own risk;
+(d) Complying with any legal or regulatory requirements that apply to them, including, where relevant, any licensing, registration, sanctions or anti-money laundering obligations that may arise from operating any software-as-a-service or business; and
+(e) Deciding whether, if at all, to issue, offer, promote or facilitate the issuance of a digital asset in connection with an Artefact and if they do, they do so exclusively in their own name and are responsible for assessing and complying any legal or regulatory requirements that may be applicable.
+
+Participants further have the following obligations in connection with their participation in the Program:
+
+(a) Comply with all laws applicable to itself and its activities in connection with the Program;
+(b) Not represent or imply that they, their Artefacts or Submissions are affiliated with, endorsed, approved, built, hosted, maintained, deployed or operated by Logos or its Affiliates.
+(c) Promptly notify Logos if any information they have provided to Logos is materially inaccurate or incomplete, including any representations and warranties provided under these Terms.
 
 ## 13. Disclaimers
 
-Logos makes the following disclaimers in relation to the Programme:
+Logos makes the following disclaimers in relation to the Program:
 
 (a) Nothing in the Program, the Specifications or any communications from Logos or its Affiliates constitutes legal, regulatory, tax, financial or technical advice. Participants should not rely on such communications and must obtain their own independent professional advice.
 (b) Logos makes no representations as to the legal or regulatory treatment of any Prizes or activities under the Program in any jurisdiction;
