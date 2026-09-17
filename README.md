@@ -31,6 +31,8 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 |------|-------------|------|--------|
 | [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
 | [LP-0018](prizes/LP-0018.md) | OpenStreetMap integration: decentralized map data distribution | Medium | Open |
+| [LP-0021](prizes/LP-0021.md) | LEZ Wallet and Provider SDK | X-Large | Draft |
+| [LP-0022](prizes/LP-0022.md) | Combined Blockchain and Zone Wallet | Large | Draft |
 
 ### Earlier prizes
 
