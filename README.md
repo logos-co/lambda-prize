@@ -40,10 +40,10 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 
 | File | Description | Size | Status |
 |------|-------------|------|--------|
-| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig | Large | Closed |
-| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor | Medium | Closed |
+| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig | Large | Closed ([Solution](solutions/LP-0002.md)) |
+| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor | Medium | Closed ([Solution](solutions/LP-0003.md)) |
 | [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation | Large | Closed ([Solution](solutions/LP-0005.md)) |
-| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large | Closed |
+| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large | Closed ([Solution](solutions/LP-0008.md)) |
 | [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy | Small | Closed ([Solution](solutions/LP-0009.md)) |
 | [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept | Small | Closed ([Solution](solutions/LP-0010.md)) |
 | [LP-0012](prizes/LP-0012.md) | Event/Log mechanism | Large | Closed ([Solution](solutions/LP-0012.md)) |
