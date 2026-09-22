@@ -33,6 +33,7 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 | [LP-0018](prizes/LP-0018.md) | OpenStreetMap integration: decentralized map data distribution | Medium | Open |
 | [LP-0021](prizes/LP-0021.md) | LEZ Wallet and Provider SDK | X-Large | Draft |
 | [LP-0022](prizes/LP-0022.md) | Combined Blockchain and Zone Wallet | Large | Draft |
+| [LP-0023](prizes/LP-0023.md) | LEZ Program Registry | Small | Draft |
 
 ### Earlier prizes
 
@@ -41,10 +42,10 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 
 | File | Description | Size | Status |
 |------|-------------|------|--------|
-| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig | Large | Closed |
-| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor | Medium | Closed |
+| [LP-0002](prizes/LP-0002.md) | Private M-of-N Multisig | Large | Closed ([Solution](solutions/LP-0002.md)) |
+| [LP-0003](prizes/LP-0003.md) | Private Allowlist / Airdrop Distributor | Medium | Closed ([Solution](solutions/LP-0003.md)) |
 | [LP-0005](prizes/LP-0005.md) | Private Token Balance Attestation | Large | Closed ([Solution](solutions/LP-0005.md)) |
-| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large | Closed |
+| [LP-0008](prizes/LP-0008.md) | Autonomous AI Module with Wallet, Storage, and Messaging | Large | Closed ([Solution](solutions/LP-0008.md)) |
 | [LP-0009](prizes/LP-0009.md) | Keycard NIP-46 Nostr Signer Proxy | Small | Closed ([Solution](solutions/LP-0009.md)) |
 | [LP-0010](prizes/LP-0010.md) | Shell dApp Integration Proof of Concept | Small | Closed ([Solution](solutions/LP-0010.md)) |
 | [LP-0012](prizes/LP-0012.md) | Event/Log mechanism | Large | Closed ([Solution](solutions/LP-0012.md)) |
@@ -85,6 +86,8 @@ The following policies apply to **all** prizes unless a specific prize states ot
 **Feedback.** Initial evaluation feedback is limited to a simple pass/fail result based on the success criteria and the **Adoption** section. For more detailed guidance or technical discussion, builders are encouraged to participate in the community Discord. The #builder-hub channel is the best place to ask questions and engage with evaluators or other builders. Logos’ feedback in this regard is meant to just be helpful guidance and not intended to be any particular approval or endorsement of any particular submission or any representation or warranty about its safety, reliability or fitness for any particular purpose.
 
 **Demo requirements.** A narrated demo is optional unless the prize's Submission Requirements say otherwise. Prize-specific demo content is listed in each prize's **Submission Requirements**.
+
+**Logos CCs.** Service providers of Logos, including their contractors and sub-contractors (“Logos CCs”) are not permitted to participate in λPrize in any capacity. Submissions from Logos CCs will be rejected. For the purposes of the adoption criteria, Logos CCs will not be counted when determining whether a Submission has met such criteria.
 
 ## FAQ
 
@@ -128,7 +131,6 @@ All participants are bound by the [Terms & Conditions](TERMS.md). Key points:
 
 - Participants are ultimately responsible for their submissions and artefacts included in such submissions
 - Submissions must be dual licensed under the MIT License and Apache License 2.0.
-- One submission per week per prize per participant/team.
 - Logos retains sole discretion over evaluation and prize awards.
 - Submissions are public and non-confidential.
 - The Association does not endorse, approve them and provides no representations or warranties regarding their safety, reliability or fitness for any particular purpose. In any event, Association’s liability is limited.
