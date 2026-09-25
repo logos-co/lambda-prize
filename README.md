@@ -34,6 +34,7 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 | [LP-0021](prizes/LP-0021.md) | LEZ Wallet and Provider SDK | X-Large | Open |
 | [LP-0022](prizes/LP-0022.md) | Combined Blockchain and Zone Wallet | Large | Draft |
 | [LP-0023](prizes/LP-0023.md) | LEZ Program Registry | Medium | Open |
+| [LP-0027](prizes/LP-0027.md) | Atomic-Swap Maker Operator Kit: three independent testnet makers | Large | Draft |
 
 ### Earlier prizes
 
