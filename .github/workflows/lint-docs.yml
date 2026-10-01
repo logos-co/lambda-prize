@@ -1,23 +1,14 @@
 name: Lint Docs
 
 # House-style checks for maintainer-owned docs, run with Vale. Config is
-# .vale.ini; rules live in .github/vale/Lambda/.
-# Plain `pull_request` with read-only perms: nothing here needs to comment, so
-# the PR tree can be checked out and linted directly (fork PRs included).
+# .vale.ini; rules live in .github/vale/Lambda/. Only lines added by the PR
+# are reported. Read-only token: the default reporter annotates fork PRs
+# through the runner log, so no write access is needed.
 on:
   pull_request:
-  push:
-    branches: [master]
 
 permissions:
   contents: read
-
-concurrency:
-  group: lint-docs-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-env:
-  VALE_VERSION: 3.24.0
 
 jobs:
   vale:
@@ -27,18 +18,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Vale
-        run: |
-          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin vale
-          vale --version
-
-      - name: Lint docs
-        run: |
-          # Human-readable report in the log, then one annotation per alert so
-          # problems show inline on the PR diff. Exit non-zero on any error.
-          status=0
-          vale --no-wrap . || status=$?
-          vale --output=JSON . | jq -r 'to_entries[] | .key as $f | .value[]
-            | "::error file=\($f),line=\(.Line),col=\(.Span[0]),title=\(.Check)::\(.Message)"'
-          exit $status
+      - uses: errata-ai/vale-action@v3
+        with:
+          version: 3.24.0
+          fail_on_error: true
