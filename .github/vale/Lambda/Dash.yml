@@ -1,0 +1,7 @@
+extends: existence
+message: "Don't use an em or en dash ('%s'). Use ' - ' or ':' instead."
+level: error
+nonword: true
+tokens:
+  - '—'
+  - '–'

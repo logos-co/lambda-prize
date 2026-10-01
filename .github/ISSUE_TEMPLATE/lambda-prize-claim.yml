@@ -1,6 +1,6 @@
-name: Lambda Prize — payment
+name: Lambda Prize - payment
 description: You were awarded a Lambda Prize and need to submit details so we can verify and process payment.
-title: "Lambda Prize — payment"
+title: "Lambda Prize - payment"
 labels:
   - payment
 body:
