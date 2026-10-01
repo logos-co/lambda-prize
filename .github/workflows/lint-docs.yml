@@ -1,0 +1,24 @@
+name: Lint Docs
+
+# House-style checks for maintainer-owned docs, run with Vale. Config is
+# .vale.ini; rules live in .github/vale/Lambda/. Only lines added by the PR
+# are reported. Read-only token: the default reporter annotates fork PRs
+# through the runner log, so no write access is needed.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  vale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: errata-ai/vale-action@v3
+        with:
+          version: 3.24.0
+          fail_on_error: true

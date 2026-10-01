@@ -1,0 +1,13 @@
+extends: existence
+message: "Write '%s' as a plain dollar amount, e.g. $1500 (no thousands separator, no USD, no k)."
+level: error
+nonword: true
+tokens:
+  # $1,200 / $1.200
+  - '\$\d{1,3}(?:[,.]\d{3})+\b'
+  # 1200 USD / 1.200 USD
+  - '\b\d[\d,.]*\s?USD\b'
+  # USD 1200
+  - '\bUSD\s?\d[\d,.]*'
+  # $1.5k / $2M
+  - '\$\d[\d.]*[kKmM]\b'

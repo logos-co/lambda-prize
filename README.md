@@ -29,7 +29,7 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 
 | File | Description | Size | Status |
 |------|-------------|------|--------|
-| [LP-0000](prizes/LP-0000.md) | Template — use this as the starting point for new prizes | — | — |
+| [LP-0000](prizes/LP-0000.md) | Template - use this as the starting point for new prizes | - | - |
 | [LP-0001](prizes/LP-0001.md) | NFT Wallet Support and Private Ownership Proof | Medium | Open |
 | [LP-0018](prizes/LP-0018.md) | OpenStreetMap integration: decentralized map data distribution | Medium | Open |
 | [LP-0021](prizes/LP-0021.md) | LEZ Wallet and Provider SDK | X-Large | Open |
@@ -62,8 +62,10 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 Prizes can currently only be proposed by Logos CCs. A separate process for sourcing ideas from the wider community is planned.
 
 1. Copy `[prizes/LP-0000.md](prizes/LP-0000.md)` to `prizes/LP-XXXX.md`, where `XXXX` is the next available number.
-2. Fill in all sections except **Prize Structure** (prize pool, revision date) — these are determined by the Logos team.
+2. Fill in all sections except **Prize Structure** (prize pool, revision date) - these are determined by the Logos team.
 3. Open a pull request titled `LP-XXXX: <Prize Title>`.
+
+CI runs [Vale](https://vale.sh) on prize specs and repo docs to keep the writing consistent: licensing is "MIT and Apache-2.0" (never "or"), amounts are written `$1500`, and em/en dashes are replaced with ` - `. The rules live in [`.github/vale/Lambda/`](.github/vale/Lambda/). [Install Vale](https://vale.sh/docs/install) and run `vale .` before opening the PR.
 
 The first **solution PR** that meets the success criteria and the prize's **Adoption** section wins. Meeting the criteria without a solution PR in this repository does not establish priority. Single winner unless otherwise specified in the prize.
 
@@ -71,9 +73,9 @@ The first **solution PR** that meets the success criteria and the prize's **Adop
 
 Solutions live in the `[solutions/](solutions/)` directory. To submit a solution:
 
-1. Create a markdown file in `solutions/` matching the prize identifier — e.g., `solutions/LP-0001.md` for prize `LP-0001`.
+1. Create a markdown file in `solutions/` matching the prize identifier - e.g., `solutions/LP-0001.md` for prize `LP-0001`.
 2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials. The implementation must be dual licensed under the MIT License **and** Apache License 2.0.
-3. Open a pull request titled `Solution: LP-XXXX — <Short Description>`.
+3. Open a pull request titled `Solution: LP-XXXX - <Short Description>`.
 
 The solution PR must include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
 
@@ -95,7 +97,7 @@ The following policies apply to **all** prizes unless a specific prize states ot
 
 ### How is this meant to work?
 
-Build something useful on the Logos stack, share it, and let other builders pick it up if it helps them. When that usage is real — independent modules, on-chain activity, or whatever the prize lists — open a **solution PR** with evidence. Remember that meeting a number without a solution PR in this repository does not establish priority.
+Build something useful on the Logos stack, share it, and let other builders pick it up if it helps them. When that usage is real - independent modules, on-chain activity, or whatever the prize lists - open a **solution PR** with evidence. Remember that meeting a number without a solution PR in this repository does not establish priority.
 
 ### Why include an adoption criteria?
 

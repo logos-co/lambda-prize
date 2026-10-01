@@ -291,7 +291,7 @@ if $IS_SOLUTION; then
         [[ -f "$CLONE_DIR/$lf" ]] && has_license=true && break
       done
       if ! $has_license; then
-        err "No LICENSE in linked repo. Must be MIT or Apache-2.0."
+        err "No LICENSE in linked repo. Must be MIT and Apache-2.0 (dual licensed)."
       fi
 
       # 4c. README
@@ -381,7 +381,7 @@ fi
 # ---------------------------------------------------------------------------
 if $IS_SOLUTION && [[ -n "$SOL_CONTENT" ]]; then
   if ! echo "$SOL_CONTENT" | grep -qiE 'MIT|Apache.?2'; then
-    warn "No license mentioned. Must be MIT or Apache-2.0."
+    warn "No license mentioned. Must be MIT and Apache-2.0 (dual licensed)."
   fi
 fi
 

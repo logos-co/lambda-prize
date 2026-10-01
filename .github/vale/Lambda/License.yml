@@ -1,0 +1,8 @@
+extends: existence
+message: "Write '%s' as 'MIT and Apache-2.0': submissions are dual licensed, not either/or."
+level: error
+ignorecase: true
+nonword: true
+tokens:
+  - 'MIT\s*(?:or|/)\s*Apache[-\w.]*'
+  - 'Apache[-\w.]*\s*(?:or|/)\s*MIT'
