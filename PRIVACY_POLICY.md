@@ -1,4 +1,4 @@
-# Logos Lambda Prize Program – Privacy Policy
+# Logos Lambda Prize Program - Privacy Policy
 
 ## (1) Introduction
 
@@ -29,7 +29,7 @@ The personal data we collect via this Typeform includes the following:
 
 ## (4) Purpose and legal basis of processing
 
-We collect your personal data for the purposes of administering the Program, namely the payment of the Prize (as defined in the [Logos Lambda Prize Program – Terms & Conditions](https://github.com/logos-co/lambda-prize/blob/master/TERMS.md)), as well as to ensure Logos’ compliance with any regulatory obligations and applicable law, including sanctions compliance.
+We collect your personal data for the purposes of administering the Program, namely the payment of the Prize (as defined in the [Logos Lambda Prize Program - Terms & Conditions](https://github.com/logos-co/lambda-prize/blob/master/TERMS.md)), as well as to ensure Logos’ compliance with any regulatory obligations and applicable law, including sanctions compliance.
 
 We rely on the legal basis of “consent” in order for us to process the Personal Data, obtained via the checkbox you have ticked in the Typeform.
 

@@ -1,4 +1,4 @@
-# λPrize Program – Terms & Conditions
+# λPrize Program - Terms & Conditions
 
 *Last updated: 17 September 2026*
 
