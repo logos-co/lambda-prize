@@ -22,51 +22,15 @@ and ask the assistant to follow these instructions.
 - Use relative links within the repo: `LP-0021.md` between prize files,
   `../TERMS.md` from a prize, and `prizes/LP-0021.md` from the README.
 
-## Prize header and dependencies
+## Using the prize template
 
-Use one H1 after the dependency metadata, with the filename's ID, a descriptive
-title, and an uppercase status in square brackets:
-
-```markdown
----
-# This front matter is for internal reference and tooling only. It does not
-# form part of the Specification and is not directed at Participants.
-dependencies: []
----
-
-# LP-XXXX: Prize Title [DRAFT]
-
-**`Status: Draft`**
-**`Logos Circle: N/A`**
-```
-
-- Preserve existing metadata placement when editing an LP. The template's reminder
-  comment may stay above the metadata block.
-- Always declare `dependencies`: use `[]` for none, or entries with `id` and
-  `reason`. Use canonical IDs and list hard dependencies, explaining the required
-  capability. For example:
-
-  ```yaml
-  dependencies:
-    - id: LP-0021
-      reason: requires wallet and provider capabilities matching LP-0021 criteria
-  ```
-
-- Set Logos Circle to the relevant city/chapter, or `N/A`. Remove the template's
-  status legend and author prompts from an actual prize.
-
-## Prize status
-
-New proposals must start as Draft. Keep the H1 marker, visible status line, and
-README row consistent. The GitHub PR's draft/open state is separate from LP status.
-
-| LP state | H1 suffix | Visible status line | README status |
-| --- | --- | --- | --- |
-| Proposed or unfinished | `[DRAFT]` | **`Status: Draft`** | Draft |
-| Accepting solution submissions | `[OPEN]` | **`Status: Open`** | Open |
-| No longer accepting new submissions | `[CLOSED]` | **`Status: Closed`** | Closed |
-| Submission accepted and prize completed | `[COMPLETED]` | **`Status: Completed`** | Completed |
-
+- Follow `prizes/LP-0000.md` for the header, dependency metadata, status formats,
+  section order, success-criteria checklists, Adoption section, and prize fields.
+  Start new proposals with its Draft status.
+- Fill in the template's author prompts, then remove them. Preserve existing
+  metadata placement when editing an LP.
+- Keep the H1 marker, visible status line, and README row consistent. The GitHub
+  PR's draft/open state is separate from LP status.
 - Before opening a prize, ensure its criteria, adoption requirements, submission
   requirements, and team-approved prize details are ready for publication. Resolve
   draft placeholders and identify any remaining dependencies or blockers.
@@ -76,22 +40,8 @@ README row consistent. The GitHub PR's draft/open state is separate from LP stat
   closure notices, including any deadlines and exceptions.
 - Update the appropriate README prize table with the ID/link, description, size,
   and status. Keep IDs ordered numerically within each table.
-
-## Specification structure and writing
-
-- Follow the template's main section order. Use `##` for main sections and `###`
-  for subsections; add sections where needed.
-- Explain the intended outcome and the gap it fills. Write clear, measurable
-  success criteria as `- [ ]` checklist items, grouped under Functionality,
-  Usability, Reliability, Performance, and Supportability where applicable.
-- New LPs must include an Adoption section with measurable criteria and the
-  evidence a solution must provide. It may be a main section or a subsection of
-  Success Criteria.
 - Do not invent prize amounts, thresholds, deadlines, or status decisions. Flag
   missing information and keep pending details visible in drafts.
-- Format Prize Structure entries as `- **Total Prize:** $1500` and
-  `- **Effort:** Medium`. Match the effort label to the README's Size entry.
-  Leave unapproved prize details pending for the Logos team.
 
 ## House style
 
