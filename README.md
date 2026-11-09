@@ -37,6 +37,7 @@ Prizes are graded on a functionality gate **plus** adoption criteria (real third
 | [LP-0022](prizes/LP-0022.md) | Combined Blockchain and Zone Wallet | Large | Draft |
 | [LP-0023](prizes/LP-0023.md) | LEZ Program Registry | Medium | Open |
 | [LP-0026](prizes/LP-0026.md) | Forum App | Large | Open |
+| [LP-0029](prizes/LP-0029.md) | Private Messaging App | Medium | Draft |
 
 ### Earlier prizes
 
