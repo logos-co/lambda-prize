@@ -259,6 +259,57 @@ if $IS_SOLUTION; then
   fi
 
   # -------------------------------------------------------------------------
+  # 3j. Release integrity manifest (non-blocking for now)
+  # -------------------------------------------------------------------------
+  # Applies when the prize ships a Basecamp module or the solution already
+  # carries the section. Values are untrusted: every string that reaches the
+  # GitHub API is matched against a strict pattern first, and the API is only
+  # read. See README "Release integrity and security".
+  if [[ -n "$SOL_CONTENT" ]] && { echo "$PRIZE_CONTENT" | grep -qiE 'Basecamp|\.lgx|module catalog|logos-repo\.json' \
+       || echo "$SOL_CONTENT" | grep -qF '## Release Integrity'; }; then
+    if ! echo "$SOL_CONTENT" | grep -qF '## Release Integrity'; then
+      warn "Missing \`## Release Integrity\` section. See [Release integrity and security](${REPO_BLOB_URL}/README.md#release-integrity-and-security)."
+    else
+      RI_SECTION=$(echo "$SOL_CONTENT" | sed -n '/^## Release Integrity/,/^## [^#]/p' | sed '$d')
+
+      if ! echo "$RI_SECTION" | grep -qE '\b[0-9a-f]{40}\b'; then
+        warn "Release Integrity: no full 40-character source commit SHA."
+      fi
+      if ! echo "$RI_SECTION" | grep -qE 'did:jwk:[A-Za-z0-9_-]{20,}'; then
+        warn "Release Integrity: no signer DID (\`did:jwk:...\`)."
+      fi
+      if ! echo "$RI_SECTION" | grep -qE '\b[0-9a-fA-F]{64}\b'; then
+        warn "Release Integrity: no 64-character \`rootHash\` / SHA-256."
+      fi
+      if ! echo "$RI_SECTION" | grep -qE 'https://[A-Za-z0-9-]+\.[A-Za-z0-9.-]+/[^ )>]*logos-repo\.json'; then
+        warn "Release Integrity: no catalog \`logos-repo.json\` URL."
+      fi
+
+      RELEASE_URLS=$(echo "$RI_SECTION" \
+        | grep -oE 'https://github\.com/[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*/releases/tag/[A-Za-z0-9][A-Za-z0-9_.+-]*' \
+        | sort -u | head -20 || true)
+      if [[ -z "$RELEASE_URLS" ]]; then
+        warn "Release Integrity: no GitHub release URL (\`https://github.com/<org>/<catalog>/releases/tag/<tag>\`)."
+      else
+        while IFS= read -r rel_url; do
+          rel_path="${rel_url#https://github.com/}"
+          rel_repo="${rel_path%%/releases/tag/*}"
+          rel_tag="${rel_path##*/releases/tag/}"
+          if immutable=$(timeout 20 gh api "repos/${rel_repo}/releases/tags/${rel_tag}" --jq '.immutable' 2>/dev/null); then
+            if [[ "$immutable" == "true" ]]; then
+              info "Release \`${rel_repo}@${rel_tag}\` is immutable."
+            else
+              warn "Release \`${rel_repo}@${rel_tag}\` is not immutable. Enable release immutability and publish a new version."
+            fi
+          else
+            warn "Could not read release \`${rel_repo}@${rel_tag}\`. Make sure it exists and is public."
+          fi
+        done <<< "$RELEASE_URLS"
+      fi
+    fi
+  fi
+
+  # -------------------------------------------------------------------------
   # 4. External repo validation (clone and scan, read-only inspection)
   # -------------------------------------------------------------------------
   if [[ -n "${REPO_URL}" ]]; then

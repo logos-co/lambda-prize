@@ -75,6 +75,8 @@ jobs:
       - name: Run validation
         id: validate
         env:
+          # Read-only use: release metadata lookups for the Release Integrity check.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
