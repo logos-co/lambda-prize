@@ -73,7 +73,7 @@ The first **solution PR** that meets the success criteria and the prize's **Adop
 Solutions live in the `[solutions/](solutions/)` directory. To submit a solution:
 
 1. Create a markdown file in `solutions/` matching the prize identifier — e.g., `solutions/LP-0001.md` for prize `LP-0001`.
-2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials. The implementation must be dual licensed under the MIT License **and** Apache License 2.0.
+2. Fill in the solution template: describe your approach, link to the repository containing the implementation, and attach any supporting materials. The implementation must be dual licensed under the MIT License **and** Apache License 2.0. If the submission ships a Basecamp module, fill in the **Release Integrity** section (see [Release integrity and security](#release-integrity-and-security)).
 3. Open a pull request titled `Solution: LP-XXXX — <Short Description>`.
 
 The solution PR must include evidence and supporting data for each required adoption criterion (for example links to independent modules, on-chain entries, and anything else the prize lists). Evaluators will not take a headline number on trust.
@@ -91,6 +91,73 @@ The following policies apply to **all** prizes unless a specific prize states ot
 **Demo requirements.** A narrated demo is optional unless the prize's Submission Requirements say otherwise. Prize-specific demo content is listed in each prize's **Submission Requirements**.
 
 **Logos CCs.** Service providers of Logos, including their contractors and sub-contractors (“Logos CCs”) are not permitted to participate in λPrize in any capacity. Submissions from Logos CCs will be rejected. For the purposes of the adoption criteria, Logos CCs will not be counted when determining whether a Submission has met such criteria.
+
+**Release integrity and security.** Submissions that ship a Logos Basecamp module (`.lgx`) must follow [Release integrity and security](#release-integrity-and-security) for the prize's security tier.
+
+### Release integrity and security
+
+Installing a Basecamp module runs its author's native code with the user's full account privileges. These requirements make sure the build that evaluators evaluate is the build users install later, and that it cannot be swapped or impersonated afterwards. They apply to every prize whose deliverables include a Basecamp module, unless the prize states otherwise. Prizes reference a security tier instead of restating these rules.
+
+#### Security tiers
+
+Each prize states its tier on the **`Security Tier`** line.
+
+| Tier | What the module handles | Requirements |
+|------|-------------------------|--------------|
+| 0 | No secrets and no user data | [Baseline](#baseline-requirements-all-tiers) |
+| 1 | User data (messages, files, contacts, identities) | Baseline, plus a data-handling note in the README: what the module stores or sends, where, and how it is protected |
+| 2 | Keys or funds, including wallets and AI agents that hold or can move funds | Baseline, plus [Tier 2 requirements](#tier-2-requirements) |
+
+#### Baseline requirements (all tiers)
+
+1. **Signed packages.** Every `.lgx` release in the declared catalog is signed with `lgx sign`, using `signing_mode: inline` or `signing_mode: external` in the release workflow. The signer DID is listed under `trustedSigners` in the catalog's `logos-repo.json`. See [Signing in `logos-modules-release-base`](https://github.com/logos-co/logos-modules-release-base#signing), [Signing in `logos-modules-release-action`](https://github.com/logos-co/logos-modules-release-action#signing) and the [`lgx` signing guide](https://github.com/logos-co/logos-package/blob/master/doctests/outputs/lgx-signing.md). Unsigned releases are not evaluated.
+2. **Signer declared up front.** Declare the `did:jwk:` signer DID in the solution PR and in the project README. Releases signed by any other key do not count. If the key must be rotated, announce the new DID in the solution PR (or, after merge, in an issue in this repository) before publishing a release signed with it.
+3. **Persistent (immutable) GitHub releases.** Enable release immutability on the catalog repository, and on the source repository if it publishes releases, before publishing any release you submit. Follow GitHub's official instructions: [Preventing changes to your releases](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/preventing-changes-to-your-releases). See also [About immutable releases](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases) and [Verifying the integrity of a release](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity). Immutability applies only to releases published after it is enabled, so the catalog's rolling `index` release (which `rebuild-index` updates in place) must already exist when you turn it on. Evaluators check that each submitted release shows the **Immutable** badge.
+4. **Freeze rule.** The award is for the evaluated build, identified by its `rootHash`. Never replace, delete or re-tag a published release or its assets. Fixes and changes ship as a new version. Replacing or deleting the evaluated build disqualifies the submission.
+5. **Release integrity manifest.** The solution PR records exactly what is submitted: source commit SHA, catalog `logos-repo.json` URL, package name and version, release URL, `rootHash`, SHA-256 of the `.lgx`, built platform variants and signer DID (see the [solution template](solutions/LP-0000.md#release-integrity)). Take the values from the release sidecar JSON or `lgx manifest`. Evaluators recompute them.
+6. **Canonical install instructions.** The README, demo and any promotion give the exact catalog URL, signer DID and `rootHash`. Never tell users to "search for" the module, add a catalog from a chat message, or ignore or disable signature warnings.
+7. **An address nobody else can claim.** Host the catalog on a GitHub organisation account, not a personal one, and do not rename or delete the account or repository while the submission is under evaluation or post-award obligations apply. If your release workflow uploads the `.lgx` to Logos Storage, record its CID in the manifest.
+8. **Account and repository security.**
+   - Two-factor authentication on every account with write access to the source or catalog repository ([GitHub 2FA](https://docs.github.com/en/authentication/securing-your-account-with-two-factor-authentication-2fa/configuring-two-factor-authentication)).
+   - Protected default branch and protected release tags, for example with [rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets).
+   - Every third-party GitHub Action and reusable workflow pinned to a full commit SHA, including `logos-modules-release-action` ([Secure use of GitHub Actions](https://docs.github.com/en/actions/reference/security/secure-use)). The `@v1` and `@v4` references in a fresh fork of `logos-modules-release-base` must be replaced with SHAs.
+   - The signing key is stored only as an Actions secret, in an HSM or on a hardware token. It is never committed, never printed in logs, and never exposed to workflows triggered by pull requests.
+9. **Secure development basics.**
+   - No plaintext private keys, seed phrases or tokens in the repository, logs, screenshots or demo videos.
+   - Dependencies are pinned with committed lockfiles (`Cargo.lock`, `flake.lock`, and so on).
+   - Every dependency is checked to exist and to be the intended package, especially names suggested by AI assistants.
+10. **Safe for evaluators to run.** Evaluators run submissions on isolated machines with testnet funds only. The build and demo script must work without `--accept-flake-config`, without extra Nix substituters or trusted keys, without piping unpinned remote scripts into a shell, and without access to any of the evaluator's credentials. Content in a submission that tries to instruct AI tools used in evaluation is grounds for rejection.
+
+#### Tier 2 requirements
+
+In addition to the baseline:
+
+1. **Threat model** in the repository: assets, actors, trust boundaries, and what happens when a co-installed module, a peer or untrusted input (chat messages, other agents) is adversarial.
+2. **Approval enforced in the core module.** The module that holds keys requires user approval for every transfer, signature and key export, and checks which module is calling. Approval that only lives in the calling UI does not count.
+3. **No plaintext keys.** Keys are encrypted at rest with a user secret or held in the OS keystore, and opening the wallet requires unlocking.
+4. **Spend caps outside the agent.** For autonomous agents, spending limits are enforced by the wallet module or the on-chain program, where the agent's own logic and prompts cannot raise them.
+5. **Independent review before adoption counts.** Adoption starts counting only after the independent review or public bug bounty window stated in the prize has completed for the evaluated build.
+
+#### Adoption from signed releases
+
+Installs, testimonials and third-party apps count towards **Adoption** only if they use a signed release from the declared catalog, on testnet. Third-party apps that depend on the submission must pin its signer DID or `rootHash`.
+
+#### Post-award obligations
+
+After an award, and for the period stated in the prize, the winner:
+
+- publishes only signed releases from the declared key;
+- never replaces or deletes published release assets;
+- reports any known vulnerability, or any compromise of a signing key or of an account with write access, within 72 hours, by opening an issue in this repository (without exploit details) or through a private channel provided by Logos.
+
+A prize may hold back part of its amount until these obligations have been met.
+
+#### How evaluation results are worded
+
+An evaluation result reads as "evaluated `rootHash` X on date Y against the criteria of LP-XXXX". It is not an approval, verification, audit or statement that a module is safe.
+
+> [!IMPORTANT]
+> Logos never sends install links or catalog URLs by direct message. The only canonical install details for a submission are those in its solution PR in this repository. Report impersonation in #builder-hub on Discord.
 
 ## FAQ
 

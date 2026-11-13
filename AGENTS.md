@@ -42,6 +42,13 @@ and ask the assistant to follow these instructions.
   and status. Keep IDs ordered numerically within each table.
 - Do not invent prize amounts, thresholds, deadlines, or status decisions. Flag
   missing information and keep pending details visible in drafts.
+- Set the **`Security Tier`** line for every prize that ships a Basecamp module
+  (see "Release integrity and security" in `README.md`): 0 for no secrets or user
+  data, 1 for user data, 2 for keys or funds, including wallets and AI agents.
+  Reference the tier instead of restating its rules, and never relax them in a
+  prize without a maintainer decision. Do not describe an evaluated submission as
+  "approved", "verified" or "safe"; say which `rootHash` was evaluated, when, and
+  against which criteria.
 
 ## House style
 
